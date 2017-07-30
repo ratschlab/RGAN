@@ -43,7 +43,7 @@ The main script is `experiment.py` - this parses many options, loads and preproc
 - `mmd.py`: for maximum-mean discrepancy calculations, mostly taken from https://github.com/dougalsutherland/opt-mmd
 
 Other scripts in the repo:
-- `eICU_synthetic_dataset_generation.py`: essentially self-contained script for training the CRGAN to generate synthetic eICU data
+- `eICU_synthetic_dataset_generation.py`: essentially self-contained script for training the RCGAN to generate synthetic eICU data
 - `eICU_task.py`: script to help identify a doable task in eICU, and generating the training data - feel free to experiment with different, harder tasks!
 - `eICU_tstr_evaluation.py`: for running the TSTR evaluation using pre-generated synthetic dataset
 - `eugenium_mmd.py`: code for doing MMD 3-sample tests, from https://github.com/eugenium/mmd
@@ -51,6 +51,8 @@ Other scripts in the repo:
 - `mod_core_rnn_cell_impl.py`: this is a modification of the same script from TensorFlow, modified to allow us to initialise the bias in the LSTM (required for saving/loading models)
 - `kernel.py`: some playing around with kernels on time series
 - `tf_ops.py`: required by `eugenium_mmd.py`
+
+There are plenty of functions in many of these files that weren't used for the manuscript.
 
 ## Command line options
 
