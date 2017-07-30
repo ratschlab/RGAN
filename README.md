@@ -30,6 +30,9 @@ git clone git@github.com:ratschlab/RGAN.git
 cd RGAN
 python experiment.py --settings_file test
 ```
+## Expected Directory Structure
+
+TODO 
 
 ## Files in this Repository
 
