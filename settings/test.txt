@@ -34,5 +34,6 @@
 "shuffle": true,
 "wrong_labels": false,
 "identifier": "test",
-"num_generated_features": 14
+"num_generated_features": 14,
+"learn_scale": true
 }
