@@ -57,3 +57,15 @@ There are plenty of functions in many of these files that weren't used for the m
 ## Command line options
 
 TODO
+
+## Data sources
+
+### MNIST
+
+Get MNIST as CSVs here: https://pjreddie.com/projects/mnist-in-csv/
+
+### eICU
+
+http://eicu-crd.mit.edu/about/eicu/
+
+TODO: describe how we preprocess eICU/upload script for doing it
