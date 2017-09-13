@@ -206,7 +206,7 @@ def mnist(randomize=False):
         train = np.load('./data/mnist_train.npy')
         print('Loaded mnist from .npy')
     except IOError:
-        print('Failed to load from .npy, loading from csv')
+        print('Failed to load MNIST data from .npy, loading from csv')
         # read from the csv
         train = np.loadtxt(open('./data/mnist_train.csv', 'r'), delimiter=',')
         # scale samples from 0 to 1
