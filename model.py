@@ -283,7 +283,9 @@ def discriminator(x, hidden_units_d, seq_length, batch_size, reuse=False, cond_d
             mean_over_batch = tf.stack([tf.reduce_mean(x, axis=0)]*batch_size, axis=0)
             inputs = tf.concat([x, mean_over_batch], axis=2)
 
-        cell = tf.contrib.rnn.LSTMCell(num_units=hidden_units_d, state_is_tuple=True)
+        cell = tf.contrib.rnn.LSTMCell(num_units=hidden_units_d, 
+                state_is_tuple=True,
+                reuse=reuse)
         rnn_outputs, rnn_states = tf.nn.dynamic_rnn(
             cell=cell,
             dtype=tf.float32,
