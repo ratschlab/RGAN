@@ -9,6 +9,10 @@ from mod_core_rnn_cell_impl import LSTMCell          #modified to allow initiali
 tf.logging.set_verbosity(tf.logging.ERROR)
 import mmd
 
+from differential_privacy.dp_sgd.dp_optimizer import dp_optimizer
+from differential_privacy.dp_sgd.dp_optimizer import sanitizer
+from differential_privacy.privacy_accountant.tf import accountant
+
 # --- to do with latent space --- #
 
 def sample_Z(batch_size, seq_length, latent_dim, use_time=False, use_noisy_time=False):
@@ -92,8 +96,12 @@ def train_epoch(epoch, samples, labels, sess, Z, X, CG, CD, CS, D_loss, G_loss, 
     # at the end, get the loss
     if cond_dim > 0:
         D_loss_curr, G_loss_curr = sess.run([D_loss, G_loss], feed_dict={X: X_mb, Z: sample_Z(batch_size, seq_length, latent_dim, use_time=use_time), CG: Y_mb, CD: Y_mb})
+        D_loss_curr = np.mean(D_loss_curr)
+        G_loss_curr = np.mean(G_loss_curr)
     else:
         D_loss_curr, G_loss_curr = sess.run([D_loss, G_loss], feed_dict={X: X_mb, Z: sample_Z(batch_size, seq_length, latent_dim, use_time=use_time)})
+        D_loss_curr = np.mean(D_loss_curr)
+        G_loss_curr = np.mean(G_loss_curr)
     return D_loss_curr, G_loss_curr
 
 def WGAN_loss(Z, X, WGAN_clip=False):
@@ -164,8 +172,8 @@ def GAN_loss(Z, X, generator_settings, discriminator_settings, kappa, cond, CG, 
         D_real, D_logit_real  = discriminator(X, **discriminator_settings)
         D_fake, D_logit_fake = discriminator(G_sample, reuse=True, **discriminator_settings)
 
-    D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)))
-    D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)))
+    D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)), 1)
+    D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)), 1)
 #    D_loss_real_intermediate = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)), axis=1)
 #    D_loss_real_final = tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real_final, labels=tf.ones_like(D_logit_real_final))
 #    D_loss_real = tf.reduce_mean(kappa*D_loss_real_intermediate + (1-kappa)*D_loss_real_final)
@@ -183,18 +191,42 @@ def GAN_loss(Z, X, generator_settings, discriminator_settings, kappa, cond, CG, 
         D_loss = D_loss + D_loss_wrong
 
     #G_loss = tf.reduce_mean(tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)), axis=1))
-    G_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)))
-
+    G_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)), 1)
+    
     return D_loss, G_loss
 
-def GAN_solvers(D_loss, G_loss, learning_rate):
+def GAN_solvers(D_loss, G_loss, learning_rate, batch_size, total_examples, 
+        l2norm_bound, batches_per_lot, sigma, dp=False):
     """
     Optimizers
     """
     discriminator_vars = [v for v in tf.trainable_variables() if v.name.startswith('discriminator')]
     generator_vars = [v for v in tf.trainable_variables() if v.name.startswith('generator')]
-    D_solver = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(D_loss, var_list=discriminator_vars)
-    G_solver = tf.train.AdamOptimizer().minimize(G_loss, var_list=generator_vars)
+    if dp:
+        print('Using differentially private SGD to train discriminator!')
+        eps = tf.placeholder(tf.float32)
+        delta = tf.placeholder(tf.float32)
+        priv_accountant = accountant.GaussianMomentsAccountant(total_examples)
+        clip = True
+        l2norm_bound = l2norm_bound/batch_size
+        batches_per_lot = 1
+        sigma = 0.1
+        gaussian_sanitizer = sanitizer.AmortizedGaussianSanitizer(
+                priv_accountant,
+                [l2norm_bound, clip])
+       
+        # the trick is that we need to calculate the gradient with respect to
+        # each example in the batch, during the DP SGD step
+        D_solver = dp_optimizer.DPGradientDescentOptimizer(learning_rate,
+                [eps, delta],
+                sanitizer=gaussian_sanitizer,
+                sigma=sigma,
+                batches_per_lot=batches_per_lot).minimize(D_loss, var_list=discriminator_vars)
+    else:
+        D_loss_mean_over_batch = tf.reduce_mean(D_loss)
+        D_solver = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(D_loss_mean_over_batch, var_list=discriminator_vars)
+    G_loss_mean_over_batch = tf.reduce_mean(G_loss)
+    G_solver = tf.train.AdamOptimizer().minimize(G_loss_mean_over_batch, var_list=generator_vars)
     return D_solver, G_solver
 
 # --- to do with the model --- #
@@ -259,7 +291,8 @@ def generator(z, hidden_units_g, seq_length, batch_size, num_generated_features,
         output_3d = tf.reshape(output_2d, [-1, seq_length, num_generated_features])
     return output_3d
 
-def discriminator(x, hidden_units_d, seq_length, batch_size, reuse=False, cond_dim=0, c=None, batch_mean=False):
+def discriminator(x, hidden_units_d, seq_length, batch_size, reuse=False, 
+        cond_dim=0, c=None, batch_mean=False):
     with tf.variable_scope("discriminator") as scope:
         if reuse:
             scope.reuse_variables()
@@ -291,8 +324,9 @@ def discriminator(x, hidden_units_d, seq_length, batch_size, reuse=False, cond_d
             dtype=tf.float32,
             inputs=x)
 #        logit_final = tf.matmul(rnn_outputs[:, -1], W_final_D) + b_final_D
-        rnn_outputs_flat = tf.reshape(rnn_outputs, [-1, hidden_units_d])
-        logits = tf.matmul(rnn_outputs_flat, W_out_D) + b_out_D
+        logits = tf.einsum('ijk,km', rnn_outputs, W_out_D) + b_out_D
+#        rnn_outputs_flat = tf.reshape(rnn_outputs, [-1, hidden_units_d])
+#        logits = tf.matmul(rnn_outputs_flat, W_out_D) + b_out_D
         output = tf.nn.sigmoid(logits)
     #return output, logits, logit_final
     return output, logits

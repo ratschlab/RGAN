@@ -18,6 +18,125 @@ from math import ceil
 from sklearn.metrics.pairwise import rbf_kernel
 from sklearn.preprocessing import MinMaxScaler
 
+# --- to do with loading --- #
+def get_samples_and_labels(settings):
+    """
+    Parse settings options to load or generate correct type of data,
+    perform test/train split as necessary, and reform into 'samples' and 'labels'
+    dictionaries.
+    """
+    if settings['data_load_from']:
+        data_path = './experiments/data/' + settings['data_load_from'] + '.data.npy'
+        samples, pdf, labels = get_data('load', data_path)
+#		train, vali, test = samples['train'], samples['vali'], samples['test']
+#		train_labels, vali_labels, test_labels = labels['train'], labels['vali'], labels['test']
+#    	del samples, labels
+    elif settings['data'] == 'eICU_task':
+        # always load eICU
+        samples, pdf, labels = get_data('eICU_task', {})
+#		del samples, labels
+        train, vali, test = samples['train'], samples['vali'], samples['test']
+        train_labels, vali_labels, test_labels = labels['train'], labels['vali'], labels['test']
+        assert train_labels.shape[1] == settings['cond_dim']
+        # normalise to between -1, 1
+        train, vali, test = normalise_data(train, vali, test)
+    else:
+        # generate the data
+        data_vars = ['num_samples', 'seq_length', 'num_signals', 'freq_low',
+                'freq_high', 'amplitude_low', 'amplitude_high', 'scale',
+                'full_mnist']
+        data_settings = dict((k, settings[k]) for k in data_vars if k in settings.keys())
+        samples, pdf, labels = get_data(settings['data'], data_settings)
+        if 'multivariate_mnist' in settings and settings['multivariate_mnist']:
+            seq_length = samples.shape[1]
+            samples = samples.reshape(-1, int(np.sqrt(seq_length)), int(np.sqrt(seq_length)))
+        if 'normalise' in settings and settings['normalise']: # TODO this is a mess, fix
+            print(settings['normalise'])
+            norm = True
+        else:
+            norm = False
+        if labels is None:
+            train, vali, test = split(samples, [0.6, 0.2, 0.2], normalise=norm)
+            train_labels, vali_labels, test_labels = None, None, None
+        else:
+            train, vali, test, labels_list = split(samples, [0.6, 0.2, 0.2], normalise=norm, labels=labels)
+            train_labels, vali_labels, test_labels = labels_list
+
+    labels = dict()
+    labels['train'], labels['vali'], labels['test'] = train_labels, vali_labels, test_labels
+
+    samples = dict()
+    samples['train'], samples['vali'], samples['test'] = train, vali, test
+
+    # futz around with labels
+    # TODO refactor cause this is messy
+    if 'one_hot' in settings and settings['one_hot'] and not settings['data_load_from']:
+        if len(labels['train'].shape) == 1:
+            # ASSUME labels go from 0 to max_val inclusive, find max-val
+            max_val = int(np.max([labels['train'].max(), labels['test'].max(), labels['vali'].max()]))
+            # now we have max_val + 1 dimensions
+            print('Setting cond_dim to', max_val + 1, 'from', settings['cond_dim'])
+            settings['cond_dim'] = max_val + 1
+            print('Setting max_val to 1 from', settings['max_val'])
+            settings['max_val'] = 1
+
+            labels_oh = dict()
+            for (k, v) in labels.items():
+                A = np.zeros(shape=(len(v), settings['cond_dim']))
+                A[np.arange(len(v)), (v).astype(int)] = 1
+                labels_oh[k] = A
+            labels = labels_oh
+    else:
+        assert settings['max_val'] == 1
+        # this is already one-hot!
+
+    if 'predict_labels' in settings and settings['predict_labels']:
+        samples, labels = data_utils.make_predict_labels(samples, labels)
+        print('Setting cond_dim to 0 from', settings['cond_dim'])
+        settings['cond_dim'] = 0
+
+    # update the settings dictionary to update erroneous settings
+    # (mostly about the sequence length etc. - it gets set by the data!)
+    settings['seq_length'] = samples['train'].shape[1]
+    settings['num_samples'] = samples['train'].shape[0] + samples['vali'].shape[0] + samples['test'].shape[0]
+    settings['num_signals'] = samples['train'].shape[2]
+    settings['num_generated_features'] = samples['train'].shape[2]
+
+    return samples, pdf, labels
+
+def get_data(data_type, data_options=None):
+    """
+    Helper/wrapper function to get the requested data.
+    """
+    labels = None
+    pdf = None
+    if data_type == 'load':
+        data_dict = np.load(data_options).item()
+        samples = data_dict['samples']
+        pdf = data_dict['pdf']
+        labels = data_dict['labels']
+    elif data_type == 'sine':
+        samples = sine_wave(**data_options)
+    elif data_type == 'mnist':
+        if data_options['full_mnist']:
+            samples, labels = mnist()
+        else:
+            samples, labels = load_resized_mnist_0_5(14)
+    elif data_type == 'gp_rbf':
+        print(data_options)
+        samples, pdf = GP(**data_options, kernel='rbf')
+    elif data_type == 'linear':
+        samples, pdf = linear(**data_options)
+    elif data_type == 'eICU_task':
+        samples, labels = eICU_task()
+    elif data_type == 'resampled_eICU':
+        samples, labels = resampled_eICU(**data_options)
+    else:
+        raise ValueError(data_type)
+    print('Generated/loaded', len(samples), 'samples from data-type', data_type)
+    return samples, pdf, labels
+
+
 def get_batch(samples, batch_size, batch_idx, labels=None):
     start_pos = batch_idx * batch_size
     end_pos = start_pos + batch_size
@@ -127,37 +246,6 @@ def split(samples, proportions, normalise=False, scale=False, labels=None, rando
             raise ValueError(type(labels))
         return train, vali, test, labels_split
 
-def get_data(data_type, data_options=None):
-    """
-    Helper/wrapper function to get the requested data.
-    """
-    labels = None
-    pdf = None
-    if data_type == 'load':
-        data_dict = np.load(data_options).item()
-        samples = data_dict['samples']
-        pdf = data_dict['pdf']
-        labels = data_dict['labels']
-    elif data_type == 'sine':
-        samples = sine_wave(**data_options)
-    elif data_type == 'mnist':
-        if data_options['full_mnist']:
-            samples, labels = mnist()
-        else:
-            samples, labels = load_resized_mnist_0_5(14)
-    elif data_type == 'gp_rbf':
-        print(data_options)
-        samples, pdf = GP(**data_options, kernel='rbf')
-    elif data_type == 'linear':
-        samples, pdf = linear(**data_options)
-    elif data_type == 'eICU_task':
-        samples, labels = eICU_task()
-    elif data_type == 'resampled_eICU':
-        samples, labels = resampled_eICU(**data_options)
-    else:
-        raise ValueError(data_type)
-    print('Generated/loaded', len(samples), 'samples from data-type', data_type)
-    return samples, pdf, labels
 
 def make_predict_labels(samples, labels):
     """ Given two dictionaries of samples, labels (already normalised, split etc)

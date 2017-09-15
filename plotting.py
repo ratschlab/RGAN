@@ -7,6 +7,36 @@ from time import time
 from matplotlib.colors import hsv_to_rgb
 from pandas import read_table, read_hdf
 
+def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch, identifier, num_epochs, resample_rate_in_min):
+
+    if data == 'mnist':
+        if predict_labels:
+            n_labels = 1
+            if one_hot:
+                n_labels = 6
+                lab_votes = np.argmax(vis_sample[:, :, -n_labels:], axis=2)
+            else:
+                lab_votes = vis_sample[:, :, -n_labels:]
+            labs, _ = mode(lab_votes, axis=1)
+            samps = vis_sample[:, :, :-n_labels]
+        else:
+            labs = None
+            samps = vis_sample
+        if multivariate_mnist:
+            save_mnist_plot_sample(samps.reshape(-1, seq_length**2, 1), epoch, identifier, n_samples=6, labels=labs)
+        else:
+            save_mnist_plot_sample(samps, epoch, identifier, n_samples=6, labels=labs)
+    elif 'eICU' in data:
+        vis_eICU_patients_downsampled(vis_sample[:6, :, :],
+                resample_rate_in_min,
+                identifier=identifier,
+                idx=epoch)
+    else:
+        save_plot_sample(vis_sample, epoch, identifier, n_samples=6,
+                num_epochs=num_epochs) 
+
+    return True
+
 def save_plot_sample(samples, idx, identifier, n_samples=6, num_epochs=None, ncol=2):
     assert n_samples <= samples.shape[0]
     assert n_samples % ncol == 0
