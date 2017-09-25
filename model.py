@@ -210,7 +210,6 @@ def GAN_solvers(D_loss, G_loss, learning_rate, batch_size, total_examples,
         clip = True
         l2norm_bound = l2norm_bound/batch_size
         batches_per_lot = 1
-        sigma = 0.1
         gaussian_sanitizer = sanitizer.AmortizedGaussianSanitizer(
                 priv_accountant,
                 [l2norm_bound, clip])
@@ -225,9 +224,10 @@ def GAN_solvers(D_loss, G_loss, learning_rate, batch_size, total_examples,
     else:
         D_loss_mean_over_batch = tf.reduce_mean(D_loss)
         D_solver = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(D_loss_mean_over_batch, var_list=discriminator_vars)
+        priv_accountant = None
     G_loss_mean_over_batch = tf.reduce_mean(G_loss)
     G_solver = tf.train.AdamOptimizer().minimize(G_loss_mean_over_batch, var_list=generator_vars)
-    return D_solver, G_solver
+    return D_solver, G_solver, priv_accountant
 
 # --- to do with the model --- #
 

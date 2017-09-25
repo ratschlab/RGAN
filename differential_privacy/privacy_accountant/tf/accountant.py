@@ -36,6 +36,7 @@ from differential_privacy.dp_sgd.dp_optimizer import utils
 
 EpsDelta = collections.namedtuple("EpsDelta", ["spent_eps", "spent_delta"])
 
+import pdb
 
 # TODO(liqzhang) To ensure the same API for AmortizedAccountant and
 # MomentsAccountant, we pass the union of arguments to both, so we
@@ -279,11 +280,11 @@ class MomentsAccountant(object):
     assert (target_eps is None) ^ (target_deltas is None)
     eps_deltas = []
     log_moments = sess.run(self._log_moments)
-    log_moments_with_order = zip(self._moment_orders, log_moments)
+    log_moments_with_order = numpy.array(list(zip(self._moment_orders, log_moments)))
     if target_eps is not None:
       for eps in target_eps:
-        eps_deltas.append(
-            EpsDelta(eps, self._compute_delta(log_moments_with_order, eps)))
+        delta = self._compute_delta(log_moments_with_order, eps)
+        eps_deltas.append(EpsDelta(eps, delta))
     else:
       assert target_deltas
       for delta in target_deltas:

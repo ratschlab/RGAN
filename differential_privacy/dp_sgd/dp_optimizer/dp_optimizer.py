@@ -221,7 +221,7 @@ class DPGradientDescentOptimizer(tf.train.GradientDescentOptimizer):
         normalized_grads.append(normalized_grad)
 
       with tf.control_dependencies(normalized_grads):
-        grads_and_vars = zip(normalized_grads, var_list)
+        grads_and_vars = list(zip(normalized_grads, var_list))
         self._assert_valid_dtypes(
             [v for g, v in grads_and_vars if g is not None])
         apply_san_grads = self.apply_gradients(grads_and_vars,

@@ -27,10 +27,11 @@ def get_samples_and_labels(settings):
     """
     if settings['data_load_from']:
         data_path = './experiments/data/' + settings['data_load_from'] + '.data.npy'
+        print('Loading data from', data_path)
         samples, pdf, labels = get_data('load', data_path)
-#		train, vali, test = samples['train'], samples['vali'], samples['test']
-#		train_labels, vali_labels, test_labels = labels['train'], labels['vali'], labels['test']
-#    	del samples, labels
+        train, vali, test = samples['train'], samples['vali'], samples['test']
+        train_labels, vali_labels, test_labels = labels['train'], labels['vali'], labels['test']
+        del samples, labels
     elif settings['data'] == 'eICU_task':
         # always load eICU
         samples, pdf, labels = get_data('eICU_task', {})
@@ -86,9 +87,9 @@ def get_samples_and_labels(settings):
                 A[np.arange(len(v)), (v).astype(int)] = 1
                 labels_oh[k] = A
             labels = labels_oh
-    else:
-        assert settings['max_val'] == 1
-        # this is already one-hot!
+        else:
+            assert settings['max_val'] == 1
+            # this is already one-hot!
 
     if 'predict_labels' in settings and settings['predict_labels']:
         samples, labels = data_utils.make_predict_labels(samples, labels)

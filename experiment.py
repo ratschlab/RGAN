@@ -55,7 +55,7 @@ if CGAN: assert not predict_labels
 
 D_loss, G_loss = model.GAN_loss(Z, X, generator_settings, discriminator_settings, 
         kappa, CGAN, CG, CD, CS, wrong_labels=wrong_labels)
-D_solver, G_solver = model.GAN_solvers(D_loss, G_loss, learning_rate, batch_size, 
+D_solver, G_solver, priv_accountant = model.GAN_solvers(D_loss, G_loss, learning_rate, batch_size, 
         total_examples=samples['train'].shape[0], l2norm_bound=l2norm_bound,
         batches_per_lot=batches_per_lot, sigma=dp_sigma, dp=dp)
 G_sample = model.generator(Z, **generator_settings, reuse=True, c=CG)
@@ -137,6 +137,10 @@ else:
     plotting.save_plot_sample(vis_real, 0, identifier + '_real', n_samples=6, 
                             num_epochs=num_epochs)
 
+# for dp
+target_eps = [0.125, 0.25, 0.5, 1, 2, 4, 8]
+dp_trace = open('./experiments/traces/' + identifier + '.dptrace.txt', 'w')
+dp_trace.write('epoch ' + ' ' .join(map(str, target_eps)))
 
 trace = open('./experiments/traces/' + identifier + '.trace.txt', 'w')
 trace.write('epoch time D_loss G_loss mmd2 that ll real_ll\n')
@@ -222,7 +226,16 @@ for epoch in range(num_epochs):
         that = 'NA'
         ll_sample = 'NA'
         ll_real = 'NA'
-  
+    
+    ## get 'spent privacy'
+    if dp:
+        spent_eps_deltas = priv_accountant.get_privacy_spent(sess, target_eps=target_eps)
+        # get the moments
+        deltas = []
+        for (spent_eps, spent_delta) in spent_eps_deltas:
+            deltas.append(spent_delta)
+        dp_trace.write(str(epoch) + ' ' + ' '.join(map(str, deltas)) + '\n')
+        if epoch % 10 == 0: dp_trace.flush()
 
     ## print
     t = time() - t0

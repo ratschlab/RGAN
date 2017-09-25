@@ -271,7 +271,7 @@ def plot_trace(identifier, xmax=250, final=False):
     fig, axarr = plt.subplots(nrow, ncol, sharex='col', figsize=(6, 6))
 
     # D_loss
-    axarr[0].plot(da.epoch, da.D_loss, color='red')
+    d_handle,  = axarr[0].plot(da.epoch, da.D_loss, color='red', label='discriminator')
     axarr[0].set_ylabel('D loss')
 #    axarr[0].set_ylim(0.9, 1.6)
     if final:
@@ -282,7 +282,7 @@ def plot_trace(identifier, xmax=250, final=False):
             axarr[0].plot((-10, xmax+10), (tick, tick), ls='dotted', lw=0.5, color='black', alpha=0.4, zorder=0)
     # G loss
     ax_G = axarr[0].twinx()
-    ax_G.plot(da.epoch, da.G_loss, color='green', ls='dashed')
+    g_handle,  = ax_G.plot(da.epoch, da.G_loss, color='green', ls='dashed', label='generator')
     ax_G.set_ylabel('G loss')
     if final:
         G_ticks = [2.5, 5]
@@ -295,13 +295,13 @@ def plot_trace(identifier, xmax=250, final=False):
     ax_G.spines["right"].set_visible(False)
     ax_G.spines["left"].set_visible(False)
     ax_G.tick_params(bottom='off', right='off')
-    # make background grey
+    axarr[0].legend(handles=[d_handle, g_handle], labels=['discriminator', 'generator'])
 
     # mmd
     da_mmd = da.loc[:, ['epoch', 'mmd2']].dropna()
     axarr[1].plot(da_mmd.epoch, da_mmd.mmd2, color='purple')
     axarr[1].set_ylabel('MMD$^2$')
-    axarr[1].set_ylim(0.0, 0.04)
+    #axarr[1].set_ylim(0.0, 0.04)
 
     #ax_that = axarr[1].twinx()
     #ax_that.plot(da.that)
