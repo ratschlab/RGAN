@@ -259,14 +259,18 @@ def plot_sine_evaluation(real_samples, fake_samples, idx, identifier):
     plt.close()
     return True
 
-def plot_trace(identifier, xmax=250, final=False):
+def plot_trace(identifier, xmax=250, final=False, dp=False):
     """
     """
 
     trace_path = './experiments/traces/' + identifier + '.trace.txt'
     da = read_table(trace_path, sep=' ')
-
-    nrow=3
+    nrow = 3
+    if dp:
+        trace_dp_path = './experiments/traces/' + identifier + '.dptrace.txt'
+        da_dp = read_table(trace_dp_path, sep=' ')
+        nrow += 1
+    
     ncol=1  
     fig, axarr = plt.subplots(nrow, ncol, sharex='col', figsize=(6, 6))
 
@@ -327,7 +331,22 @@ def plot_trace(identifier, xmax=250, final=False):
         axarr[2].get_yaxis().set_ticks(ll_ticks)
         for tick in ll_ticks:
             axarr[2].plot((-10, xmax+10), (tick, tick), ls='dotted', lw=0.5, color='black', alpha=0.4, zorder=0)
-    
+   
+    if dp:
+        assert da_dp.columns[0] == 'epoch'
+        epochs = da_dp['epoch']
+        eps_values = da_dp.columns[1:]
+        for eps_string in eps_values:
+            if 'eps' in eps_string:
+                eps = eps_string[3:]
+            else:
+                eps = eps_string
+            deltas = da_dp[eps_string]
+            axarr[3].plot(epochs, deltas, label=eps)
+            axarr[3].set_ylabel('delta')
+            axarr[3].set_xlabel('epoch')
+        axarr[3].legend()
+
     # beautify
     for ax in axarr:
         #ax.spines["top"].set_visible(True)

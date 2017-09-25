@@ -140,7 +140,7 @@ else:
 # for dp
 target_eps = [0.125, 0.25, 0.5, 1, 2, 4, 8]
 dp_trace = open('./experiments/traces/' + identifier + '.dptrace.txt', 'w')
-dp_trace.write('epoch ' + ' ' .join(map(str, target_eps)))
+dp_trace.write('epoch ' + ' eps' .join(map(str, target_eps)) + '\n')
 
 trace = open('./experiments/traces/' + identifier + '.trace.txt', 'w')
 trace.write('epoch time D_loss G_loss mmd2 that ll real_ll\n')
@@ -248,7 +248,7 @@ for epoch in range(num_epochs):
     trace.write(' '.join(map(str, [epoch, t, D_loss_curr, G_loss_curr, mmd2, that_np, ll_sample, ll_real])) + '\n')
     if epoch % 10 == 0: 
         trace.flush()
-        plotting.plot_trace(identifier, xmax=num_epochs)
+        plotting.plot_trace(identifier, xmax=num_epochs, dp=dp)
 
     if shuffle:     # shuffle the training data 
         perm = np.random.permutation(samples['train'].shape[0])
@@ -260,7 +260,7 @@ for epoch in range(num_epochs):
         model.dump_parameters(identifier + '_' + str(epoch), sess)
 
 trace.flush()
-plotting.plot_trace(identifier, xmax=num_epochs)
+plotting.plot_trace(identifier, xmax=num_epochs, dp=dp)
 model.dump_parameters(identifier + '_' + str(epoch), sess)
 
 ## after-the-fact evaluation
