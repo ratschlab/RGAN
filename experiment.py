@@ -143,7 +143,7 @@ dp_trace = open('./experiments/traces/' + identifier + '.dptrace.txt', 'w')
 dp_trace.write('epoch ' + ' eps' .join(map(str, target_eps)) + '\n')
 
 trace = open('./experiments/traces/' + identifier + '.trace.txt', 'w')
-trace.write('epoch time D_loss G_loss mmd2 that ll real_ll\n')
+trace.write('epoch time D_loss G_loss mmd2 that pdf real_pdf\n')
 
 # --- train --- #
 train_vars = ['batch_size', 'D_rounds', 'G_rounds', 'use_time', 'seq_length', 
@@ -153,7 +153,7 @@ train_settings = dict((k, settings[k]) for k in train_vars)
 
 
 t0 = time()
-print('epoch\ttime\tD_loss\tG_loss\tmmd2\tthat\tll_sample\tll_real')
+print('epoch\ttime\tD_loss\tG_loss\tmmd2\tthat\tpdf_sample\tpdf_real')
 for epoch in range(num_epochs):
     D_loss_curr, G_loss_curr = model.train_epoch(epoch, samples['train'], labels['train'],
                                         sess, Z, X, CG, CD, CS,
@@ -172,7 +172,7 @@ for epoch in range(num_epochs):
                 predict_labels, one_hot, epoch, identifier, num_epochs,
                 resample_rate_in_min)
    
-    # compute mmd2 and, if available, likelihood
+    # compute mmd2 and, if available, prob density
     if epoch % eval_freq == 0:
         ## how many samples to evaluate with?
         eval_Z = model.sample_Z(eval_size, seq_length, latent_dim, use_time)
@@ -213,19 +213,19 @@ for epoch in range(num_epochs):
             best_mmd2_so_far = mmd2
             model.dump_parameters(identifier + '_' + str(epoch), sess)
        
-        ## likelihood (if available)
+        ## prob density (if available)
         if not pdf is None:
-            ll_sample = np.mean(pdf(eval_sample[:, :, 0]))
-            ll_real = np.mean(pdf(eval_real[:, :, 0]))
+            pdf_sample = np.mean(pdf(eval_sample[:, :, 0]))
+            pdf_real = np.mean(pdf(eval_real[:, :, 0]))
         else:
-            ll_sample = 'NA'
-            ll_real = 'NA'
+            pdf_sample = 'NA'
+            pdf_real = 'NA'
     else:
         # report nothing this epoch
         mmd2 = 'NA'
         that = 'NA'
-        ll_sample = 'NA'
-        ll_real = 'NA'
+        pdf_sample = 'NA'
+        pdf_real = 'NA'
     
     ## get 'spent privacy'
     if dp:
@@ -240,12 +240,12 @@ for epoch in range(num_epochs):
     ## print
     t = time() - t0
     try:
-        print('%d\t%.2f\t%.4f\t%.4f\t%.5f\t%.0f\t%.2f\t%.2f' % (epoch, t, D_loss_curr, G_loss_curr, mmd2, that_np, ll_sample, ll_real))
-    except TypeError:       # ll are missing (format as strings)
-        print('%d\t%.2f\t%.4f\t%.4f\t%.5f\t%.0f\t %s\t %s' % (epoch, t, D_loss_curr, G_loss_curr, mmd2, that_np, ll_sample, ll_real))
+        print('%d\t%.2f\t%.4f\t%.4f\t%.5f\t%.0f\t%.2f\t%.2f' % (epoch, t, D_loss_curr, G_loss_curr, mmd2, that_np, pdf_sample, pdf_real))
+    except TypeError:       # pdf are missing (format as strings)
+        print('%d\t%.2f\t%.4f\t%.4f\t%.5f\t%.0f\t %s\t %s' % (epoch, t, D_loss_curr, G_loss_curr, mmd2, that_np, pdf_sample, pdf_real))
 
     ## save trace
-    trace.write(' '.join(map(str, [epoch, t, D_loss_curr, G_loss_curr, mmd2, that_np, ll_sample, ll_real])) + '\n')
+    trace.write(' '.join(map(str, [epoch, t, D_loss_curr, G_loss_curr, mmd2, that_np, pdf_sample, pdf_real])) + '\n')
     if epoch % 10 == 0: 
         trace.flush()
         plotting.plot_trace(identifier, xmax=num_epochs, dp=dp)
