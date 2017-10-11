@@ -7,8 +7,10 @@ from time import time
 from matplotlib.colors import hsv_to_rgb
 from pandas import read_table, read_hdf
 
-def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch, identifier, num_epochs, resample_rate_in_min):
-
+def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch,
+        identifier, num_epochs, resample_rate_in_min, multivariate_mnist,
+        seq_length):
+    # TODO: what's with all these arguments
     if data == 'mnist':
         if predict_labels:
             n_labels = 1
@@ -61,7 +63,7 @@ def save_plot_sample(samples, idx, identifier, n_samples=6, num_epochs=None, nco
         axarr[-1, n].xaxis.set_ticks(range(0, sample_length, int(sample_length/4)))
     fig.suptitle(idx)
     fig.subplots_adjust(hspace = 0.15)
-    fig.savefig("./experiments/plots/" + identifier + "_sig" + str(idx).zfill(4) + ".png")
+    fig.savefig("./experiments/plots/" + identifier + "_epoch" + str(idx).zfill(4) + ".png")
     plt.clf()
     plt.close()
     return
@@ -197,7 +199,7 @@ def save_plot_vary_dimension(samples_list, idx, identifier, n_dim):
         axarr[-1, dim].xaxis.set_ticks(range(0, sample_length, int(sample_length/4)))
     fig.suptitle(idx)
     fig.subplots_adjust(hspace = 0.11, wspace=0.11)
-    fig.savefig("./experiments/plots/" + identifier + "_sig" + str(idx).zfill(4) + ".png")
+    fig.savefig("./experiments/plots/" + identifier + "_epoch" + str(idx).zfill(4) + ".png")
     plt.clf()
     plt.close()
     return True
@@ -460,7 +462,7 @@ def save_mnist_plot_sample(samples, idx, identifier, n_samples, labels=None):
     fig.suptitle(idx)
     fig.suptitle(idx)
     fig.subplots_adjust(hspace = 0.15)
-    fig.savefig("./experiments/plots/" + identifier + "_sig" + str(idx).zfill(4) + ".png")
+    fig.savefig("./experiments/plots/" + identifier + "_epoch" + str(idx).zfill(4) + ".png")
     plt.clf()
     plt.close()
     return
@@ -562,7 +564,7 @@ def vis_eICU_patients_downsampled(pat_arrs, time_step, time_steps_to_plot=None,
     axarr[-1].get_xaxis().tick_bottom()
     if not identifier is None:
         plt.suptitle(idx)
-        fig.savefig("./experiments/plots/" + identifier + "_sig" + str(idx).zfill(4) + ".png", bbox_inches='tight')
+        fig.savefig("./experiments/plots/" + identifier + "_epoch" + str(idx).zfill(4) + ".png", bbox_inches='tight')
     else:
         fig.savefig('./experiments/plots/eICU_patients.png', bbox_inches='tight')
     plt.clf()
