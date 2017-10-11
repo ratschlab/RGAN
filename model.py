@@ -61,7 +61,7 @@ def train_epoch(epoch, samples, labels, sess, Z, X, CG, CD, CS, D_loss, G_loss, 
     """
     Train generator and discriminator for one epoch.
     """
-    for batch_idx in range(0, int(len(samples) / batch_size) - D_rounds, D_rounds + (cond_dim > 0)*G_rounds):
+    for batch_idx in range(0, int(len(samples) / batch_size) - (D_rounds + (cond_dim > 0)*G_rounds), D_rounds + (cond_dim > 0)*G_rounds):
         # update the discriminator
         for d in range(D_rounds):
             X_mb, Y_mb = data_utils.get_batch(samples, batch_size, batch_idx + d, labels)
@@ -155,39 +155,24 @@ def GAN_loss(Z, X, generator_settings, discriminator_settings, kappa, cond, CG, 
     if cond:
         # C-GAN
         G_sample = generator(Z, **generator_settings, c=CG)
-        #D_real, D_logit_real, D_logit_real_final = discriminator(X, **discriminator_settings, c=CD)
-        #D_fake, D_logit_fake, D_logit_fake_final = discriminator(G_sample, reuse=True, **discriminator_settings, c=CG)
         D_real, D_logit_real =  discriminator(X, **discriminator_settings, c=CD)
         D_fake, D_logit_fake = discriminator(G_sample, reuse=True, **discriminator_settings, c=CG)
         
         if wrong_labels:
             # the discriminator must distinguish between real data with fake labels and real data with real labels, too
-            #D_wrong, D_logit_wrong, D_logit_wrong_final = discriminator(X, reuse=True, **discriminator_settings, c=CS)
             D_wrong, D_logit_wrong = discriminator(X, reuse=True, **discriminator_settings, c=CS)
     else:
         # normal GAN
         G_sample = generator(Z, **generator_settings)
-        #D_real, D_logit_real, D_logit_real_final = discriminator(X, **discriminator_settings)
-        #D_fake, D_logit_fake, D_logit_fake_final = discriminator(G_sample, reuse=True, **discriminator_settings)
         D_real, D_logit_real  = discriminator(X, **discriminator_settings)
         D_fake, D_logit_fake = discriminator(G_sample, reuse=True, **discriminator_settings)
 
     D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)), 1)
     D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)), 1)
-#    D_loss_real_intermediate = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real, labels=tf.ones_like(D_logit_real)), axis=1)
-#    D_loss_real_final = tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_real_final, labels=tf.ones_like(D_logit_real_final))
-#    D_loss_real = tf.reduce_mean(kappa*D_loss_real_intermediate + (1-kappa)*D_loss_real_final)
-
-#    D_loss_fake_intermediate = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.zeros_like(D_logit_fake)), axis=1)
-#    D_loss_fake_final = tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake_final, labels=tf.zeros_like(D_logit_fake_final))
-#    D_loss_fake = tf.reduce_mean(kappa*D_loss_fake_intermediate + (1-kappa)*D_loss_fake_final)
 
     D_loss = D_loss_real + D_loss_fake
 
     if cond and wrong_labels:
-#        D_loss_wrong_intermediate = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_wrong, labels=tf.zeros_like(D_logit_wrong)), axis=1)
-#        D_loss_wrong_final = tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_wrong_final, labels=tf.zeros_like(D_logit_wrong_final))
-#        D_loss_wrong = tf.reduce_mean(kappa*D_loss_wrong_intermediate + (1-kappa)*D_loss_wrong_final)
         D_loss = D_loss + D_loss_wrong
 
     #G_loss = tf.reduce_mean(tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_logit_fake, labels=tf.ones_like(D_logit_fake)), axis=1))
@@ -355,7 +340,7 @@ def load_parameters(identifier):
 
 # --- to do with trained models --- #
 
-def sample_trained_model(settings, epoch, num_samples, Z_samples=None, cond_dim=0, C_samples=None):
+def sample_trained_model(settings, epoch, num_samples, Z_samples=None, C_samples=None):
     """
     Return num_samples samples from a trained model described by settings dict
     """
@@ -377,13 +362,13 @@ def sample_trained_model(settings, epoch, num_samples, Z_samples=None, cond_dim=
         # normal GAN
         G_samples = generator(Z, settings['hidden_units_g'], settings['seq_length'], 
                               num_samples, settings['num_generated_features'], 
-                              reuse=False, parameters=parameters, cond_dim=cond_dim)
+                              reuse=False, parameters=parameters, cond_dim=settings['cond_dim'])
     else:
         assert C_samples.shape[0] == num_samples
         # CGAN
         G_samples = generator(Z, settings['hidden_units_g'], settings['seq_length'], 
                               num_samples, settings['num_generated_features'], 
-                              reuse=False, parameters=parameters, cond_dim=cond_dim, c=CG)
+                              reuse=False, parameters=parameters, cond_dim=settings['cond_dim'], c=CG)
     # sample from it 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
