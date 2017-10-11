@@ -9,7 +9,7 @@ from pandas import read_table, read_hdf
 
 def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch,
         identifier, num_epochs, resample_rate_in_min, multivariate_mnist,
-        seq_length):
+        seq_length, labels):
     # TODO: what's with all these arguments
     if data == 'mnist':
         if predict_labels:
@@ -22,7 +22,7 @@ def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch,
             labs, _ = mode(lab_votes, axis=1)
             samps = vis_sample[:, :, :-n_labels]
         else:
-            labs = None
+            labs = labels
             samps = vis_sample
         if multivariate_mnist:
             save_mnist_plot_sample(samps.reshape(-1, seq_length**2, 1), epoch, identifier, n_samples=6, labels=labs)
