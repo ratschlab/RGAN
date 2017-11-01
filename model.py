@@ -87,6 +87,7 @@ def train_epoch(epoch, samples, labels, sess, Z, X, CG, CD, CS, D_loss, G_loss, 
         # update the generator
         for g in range(G_rounds):
             if cond_dim > 0:
+                # note we are essentially throwing these X_mb away...
                 X_mb, Y_mb = data_utils.get_batch(samples, batch_size, batch_idx + D_rounds + g, labels)
                 _ = sess.run(G_solver,
                         feed_dict={Z: sample_Z(batch_size, seq_length, latent_dim, use_time=use_time), CG: Y_mb})
@@ -256,6 +257,10 @@ def generator(z, hidden_units_g, seq_length, batch_size, num_generated_features,
             assert not c is None
             repeated_encoding = tf.stack([c]*seq_length, axis=1)
             inputs = tf.concat([z, repeated_encoding], axis=2)
+
+            #repeated_encoding = tf.tile(c, [1, tf.shape(z)[1]])
+            #repeated_encoding = tf.reshape(repeated_encoding, [tf.shape(z)[0], tf.shape(z)[1], cond_dim])
+            #inputs = tf.concat([repeated_encoding, z], 2)
         else:
             inputs = z
 
@@ -307,7 +312,7 @@ def discriminator(x, hidden_units_d, seq_length, batch_size, reuse=False,
         rnn_outputs, rnn_states = tf.nn.dynamic_rnn(
             cell=cell,
             dtype=tf.float32,
-            inputs=x)
+            inputs=inputs)
 #        logit_final = tf.matmul(rnn_outputs[:, -1], W_final_D) + b_final_D
         logits = tf.einsum('ijk,km', rnn_outputs, W_out_D) + b_out_D
 #        rnn_outputs_flat = tf.reshape(rnn_outputs, [-1, hidden_units_d])
@@ -381,7 +386,8 @@ def sample_trained_model(settings, epoch, num_samples, Z_samples=None, C_samples
 
 # --- to do with inversion --- #
 
-def invert(settings, epoch, samples, g_tolerance=None, e_tolerance=0.1, n_iter=None, max_iter=10000, heuristic_sigma=None):
+def invert(settings, epoch, samples, g_tolerance=None, e_tolerance=0.1,
+        n_iter=None, max_iter=10000, heuristic_sigma=None, C_samples=None):
     """
     Return the latent space points corresponding to a set of a samples
     ( from gradient descent )
@@ -405,10 +411,21 @@ def invert(settings, epoch, samples, g_tolerance=None, e_tolerance=0.1, n_iter=N
     Z = tf.get_variable(name='Z', shape=[num_samples, settings['seq_length'],
                         settings['latent_dim']],
                         initializer=tf.random_normal_initializer())
-    # create outputs
-    G_samples = generator(Z, settings['hidden_units_g'], settings['seq_length'],
-                          num_samples, settings['num_generated_features'],
-                          reuse=False, parameters=parameters)
+    if C_samples is None:
+        # create outputs
+        G_samples = generator(Z, settings['hidden_units_g'], settings['seq_length'],
+                              num_samples, settings['num_generated_features'],
+                              reuse=False, parameters=parameters)
+        fd = None
+    else:
+        CG = tf.placeholder(tf.float32, [num_samples, settings['cond_dim']])
+        assert C_samples.shape[0] == samples.shape[0]
+        # CGAN
+        G_samples = generator(Z, settings['hidden_units_g'], settings['seq_length'], 
+                              num_samples, settings['num_generated_features'], 
+                              reuse=False, parameters=parameters, cond_dim=settings['cond_dim'], c=CG)
+        fd = {CG: C_samples}
+
     # define loss
     if heuristic_sigma is None:
         heuristic_sigma = mmd.median_pairwise_distance(samples)     # this is noisy
@@ -432,35 +449,34 @@ def invert(settings, epoch, samples, g_tolerance=None, e_tolerance=0.1, n_iter=N
     print('Finding latent state corresponding to samples...')
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        error = sess.run(reconstruction_error)
-        g_n = sess.run(grad_norm)
+        error = sess.run(reconstruction_error, feed_dict=fd)
+        g_n = sess.run(grad_norm, feed_dict=fd)
         print(g_n)
         i = 0
         if not n_iter is None:
             while i < n_iter:
-                _ = sess.run(solver)
-                error = sess.run(reconstruction_error)
+                _ = sess.run(solver, feed_dict=fd)
+                error = sess.run(reconstruction_error, feed_dict=fd)
                 i += 1
         else:
             if not g_tolerance is None:
                 while g_n > g_tolerance:
-                    _ = sess.run(solver)
-                    error, g_n = sess.run([reconstruction_error, grad_norm])
+                    _ = sess.run(solver, feed_dict=fd)
+                    error, g_n = sess.run([reconstruction_error, grad_norm], feed_dict=fd)
                     i += 1
                     print(error, g_n)
                     if i > max_iter:
                         break
             else:
                 while np.abs(error) > e_tolerance:
-                    _ = sess.run(solver)
-                    error = sess.run(reconstruction_error)
+                    _ = sess.run(solver, feed_dict=fd)
+                    error = sess.run(reconstruction_error, feed_dict=fd)
                     i += 1
                     print(error)
                     if i > max_iter:
                         break
-
-        Zs = sess.run(Z)
-        error_per_sample = sess.run(reconstruction_error_per_sample)
+        Zs = sess.run(Z, feed_dict=fd)
+        error_per_sample = sess.run(reconstruction_error_per_sample, feed_dict=fd)
         print('Z found in', i, 'iterations with final reconstruction error of', error)
     tf.reset_default_graph()
     return Zs, error_per_sample, heuristic_sigma
