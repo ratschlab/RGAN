@@ -9,6 +9,7 @@ import data_utils
 import plotting
 import model
 import utils
+import eval
 
 from time import time
 from math import floor
@@ -94,13 +95,23 @@ vis_Z = model.sample_Z(batch_size, seq_length, latent_dim, use_time)
 if CGAN:
     vis_C = model.sample_C(batch_size, cond_dim, max_val, one_hot)
     if 'mnist' in data:
-        # set to be digits 0 to 5
-        if cond_dim == 1:
-            vis_C[:6] = np.arange(6)
-        else: # assume one-hot
-            vis_C[:6] = np.eye(6)
+        if one_hot:
+            if cond_dim == 6:
+                vis_C[:6] = np.eye(6)
+            elif cond_dim == 3:
+                vis_C[:3] = np.eye(3)
+                vis_C[3:6] = np.eye(3)
+            else:
+                raise ValueError(cond_dim)
+        else:
+            if cond_dim == 6:
+                vis_C[:6] = np.arange(cond_dim)
+            elif cond_dim == 3:
+                vis_C = np.tile(np.arange(3), 2)
+            else:
+                raise ValueError(cond_dim)
     elif 'eICU_task' in data:
-        vis_C = train_labels[np.random.choice(labels['train'].shape[0], batch_size, replace=False), :]
+        vis_C = labels['train'][np.random.choice(labels['train'].shape[0], batch_size, replace=False), :]
     vis_sample = sess.run(G_sample, feed_dict={Z: vis_Z, CG: vis_C})
 else:
     vis_sample = sess.run(G_sample, feed_dict={Z: vis_Z})
@@ -153,6 +164,7 @@ train_settings = dict((k, settings[k]) for k in train_vars)
 
 
 t0 = time()
+best_epoch = 0
 print('epoch\ttime\tD_loss\tG_loss\tmmd2\tthat\tpdf_sample\tpdf_real')
 for epoch in range(num_epochs):
     D_loss_curr, G_loss_curr = model.train_epoch(epoch, samples['train'], labels['train'],
@@ -177,7 +189,7 @@ for epoch in range(num_epochs):
         ## how many samples to evaluate with?
         eval_Z = model.sample_Z(eval_size, seq_length, latent_dim, use_time)
         if 'eICU_task' in data:
-            eval_C = vali_labels[np.random.choice(vali_labels.shape[0], eval_size), :]
+            eval_C = labels['vali'][np.random.choice(labels['vali'].shape[0], eval_size), :]
         else:
             eval_C = model.sample_C(eval_size, cond_dim, max_val, one_hot)
         eval_sample = np.empty(shape=(eval_size, seq_length, num_signals))
@@ -210,6 +222,7 @@ for epoch in range(num_epochs):
        
         ## save parameters
         if mmd2 < best_mmd2_so_far and epoch > 10:
+            best_epoch = epoch
             best_mmd2_so_far = mmd2
             model.dump_parameters(identifier + '_' + str(epoch), sess)
        
