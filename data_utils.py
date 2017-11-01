@@ -122,7 +122,8 @@ def get_data(data_type, data_options=None):
         if data_options['full_mnist']:
             samples, labels = mnist()
         else:
-            samples, labels = load_resized_mnist_0_5(14)
+            #samples, labels = load_resized_mnist_0_5(14)
+            samples, labels = load_resized_mnist(14)       # this is the 0-2 setting
     elif data_type == 'gp_rbf':
         print(data_options)
         samples, pdf = GP(**data_options, kernel='rbf')
