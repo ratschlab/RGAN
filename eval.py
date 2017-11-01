@@ -10,12 +10,19 @@ from eugenium_mmd import MMD_3_Sample_Test
 from scipy.stats import ks_2samp
 import mmd
 from sklearn.svm import SVC
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, precision_recall_fscore_support, accuracy_score, roc_auc_score, average_precision_score
 from sklearn.ensemble import RandomForestClassifier
 import sklearn
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+# for keras
+import keras
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Flatten
+from keras.layers import Conv2D, MaxPooling2D
+from keras.backend import clear_session
 
 import model
 import data_utils
@@ -38,62 +45,79 @@ def assert_same_data(A, B):
         raise ValueError(A['data'], B['data'])
     return data_path
 
-def model_memorisation(identifier, epoch, max_samples=2000):
+def model_memorisation(identifier, epoch, max_samples=2000, tstr=False):
     """
     Compare samples from a model against training set and validation set in mmd
     """
-    if identifier == 'cristobal_eICU':
-        model_samples = pickle.load(open('REDACTED', 'rb'))
-        samples, labels = data_utils.eICU_task()
-        train = samples['train'].reshape(-1,16,4)
-        vali = samples['vali'].reshape(-1,16,4)
-        test = samples['test'].reshape(-1,16,4)
-        #train_targets = labels['train']
-        #vali_targets = labels['vali']
-        #test_targets = labels['test']
-        train, vali, test = data_utils.scale_data(train, vali, test)
+    if tstr:
+        print('Loading data from TSTR experiment (not sampling from model)')
+        # load pre-generated samples
+        synth_data = np.load('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy').item()
+        model_samples = synth_data['samples']
+        synth_labels = synth_data['labels']
+        # load real data used in that experiment
+        real_data = np.load('./experiments/data/' + identifier + '.data.npy').item()
+        real_samples = real_data['samples']
+        train = real_samples['train']
+        test = real_samples['test']
         n_samples = test.shape[0]
-        if n_samples > max_samples:
-            n_samples = max_samples
-            test = np.random.permutation(test)[:n_samples]
         if model_samples.shape[0] > n_samples:
             model_samples = np.random.permutation(model_samples)[:n_samples]
-    elif identifier == 'cristobal_MNIST':
-        the_dir = 'REDACTED'
-        # pick a random one
-        which = np.random.choice(['NEW_OK_', '_r4', '_r5', '_r6', '_r7'])
-        model_samples, model_labels = pickle.load(open(the_dir + 'synth_mnist_minist_cdgan_1_2_100_multivar_14_nolr_rdim3_0_2_' + which + '_190.pk', 'rb'))
-        # get test and train...
-        # (generated with fixed seed...)
-        mnist_resized_dim = 14
-        samples, labels = data_utils.load_resized_mnist(mnist_resized_dim)
-        proportions = [0.6, 0.2, 0.2]
-        train, vali, test, labels_split = data_utils.split(samples, labels=labels, random_seed=1, proportions=proportions)
-        np.random.seed()
-        train = train.reshape(-1, 14, 14)
-        test = test.reshape(-1, 14, 14)
-        vali = vali.reshape(-1, 14, 14)
-        n_samples = test.shape[0]
-        if n_samples > max_samples:
-            n_samples = max_samples
-            test = np.random.permutation(test)[:n_samples]
-        if model_samples.shape[0] > n_samples:
-            model_samples = np.random.permutation(model_samples)[:n_samples]
+        print('Data loaded successfully!')
     else:
-        settings = json.load(open('./experiments/settings/' + identifier + '.txt', 'r'))
-        # get the test, train sets
-        data = np.load('./experiments/data/' + identifier + '.data.npy').item()
-        train = data['samples']['train']
-        test = data['samples']['test']
-        n_samples = test.shape[0]
-        if n_samples > max_samples:
-            n_samples = max_samples
-            test = np.random.permutation(test)[:n_samples]
-        model_samples = model.sample_trained_model(settings, epoch, n_samples)
+        if identifier == 'cristobal_eICU':
+            model_samples = pickle.load(open('REDACTED', 'rb'))
+            samples, labels = data_utils.eICU_task()
+            train = samples['train'].reshape(-1,16,4)
+            vali = samples['vali'].reshape(-1,16,4)
+            test = samples['test'].reshape(-1,16,4)
+            #train_targets = labels['train']
+            #vali_targets = labels['vali']
+            #test_targets = labels['test']
+            train, vali, test = data_utils.scale_data(train, vali, test)
+            n_samples = test.shape[0]
+            if n_samples > max_samples:
+                n_samples = max_samples
+                test = np.random.permutation(test)[:n_samples]
+            if model_samples.shape[0] > n_samples:
+                model_samples = np.random.permutation(model_samples)[:n_samples]
+        elif identifier == 'cristobal_MNIST':
+            the_dir = 'REDACTED'
+            # pick a random one
+            which = np.random.choice(['NEW_OK_', '_r4', '_r5', '_r6', '_r7'])
+            model_samples, model_labels = pickle.load(open(the_dir + 'synth_mnist_minist_cdgan_1_2_100_multivar_14_nolr_rdim3_0_2_' + which + '_190.pk', 'rb'))
+            # get test and train...
+            # (generated with fixed seed...)
+            mnist_resized_dim = 14
+            samples, labels = data_utils.load_resized_mnist(mnist_resized_dim)
+            proportions = [0.6, 0.2, 0.2]
+            train, vali, test, labels_split = data_utils.split(samples, labels=labels, random_seed=1, proportions=proportions)
+            np.random.seed()
+            train = train.reshape(-1, 14, 14)
+            test = test.reshape(-1, 14, 14)
+            vali = vali.reshape(-1, 14, 14)
+            n_samples = test.shape[0]
+            if n_samples > max_samples:
+                n_samples = max_samples
+                test = np.random.permutation(test)[:n_samples]
+            if model_samples.shape[0] > n_samples:
+                model_samples = np.random.permutation(model_samples)[:n_samples]
+        else:
+            settings = json.load(open('./experiments/settings/' + identifier + '.txt', 'r'))
+            # get the test, train sets
+            data = np.load('./experiments/data/' + identifier + '.data.npy').item()
+            train = data['samples']['train']
+            test = data['samples']['test']
+            n_samples = test.shape[0]
+            if n_samples > max_samples:
+                n_samples = max_samples
+                test = np.random.permutation(test)[:n_samples]
+            model_samples = model.sample_trained_model(settings, epoch, n_samples)
     all_samples = np.vstack([train, test, model_samples])
     heuristic_sigma = mmd.median_pairwise_distance(all_samples)
     print('heuristic sigma:', heuristic_sigma)
     pvalue, tstat, sigma, MMDXY, MMDXZ = MMD_3_Sample_Test(model_samples, test, np.random.permutation(train)[:n_samples], sigma=heuristic_sigma, computeMMDs=False)
+    #pvalue, tstat, sigma, MMDXY, MMDXZ = MMD_3_Sample_Test(model_samples, np.random.permutation(train)[:n_samples], test, sigma=heuristic_sigma, computeMMDs=False)
 #    if pvalue < 0.05:
 #        print('At confidence level 0.05, we reject the null hypothesis that MMDXY <= MMDXZ, and conclude that the test data has a smaller MMD with the true data than the generated data')
         # the function takes (X, Y, Z) as its first arguments, it's testing if MMDXY (i.e. MMD between model and train) is less than MMDXZ (MMd between model and test)
@@ -133,7 +157,7 @@ def model_comparison(identifier_A, identifier_B, epoch_A=99, epoch_B=99):
 
 # --- to do with reconstruction --- #
 
-def get_reconstruction_errors(identifier, epoch, g_tolerance=0.05, max_samples=10000, rerun=False):
+def get_reconstruction_errors(identifier, epoch, g_tolerance=0.05, max_samples=1000, rerun=False, tstr=False):
     """
     Get the reconstruction error of every point in the training set of a given
     experiment.
@@ -147,6 +171,8 @@ def get_reconstruction_errors(identifier, epoch, g_tolerance=0.05, max_samples=1
     train = samples['train']
     vali = samples['vali']
     test = samples['test']
+    labels = data_dict['labels']
+    train_labels, test_labels, synth_labels, vali_labels = None, None, None, None
     try:
         if rerun:
             raise FileNotFoundError
@@ -157,32 +183,55 @@ def get_reconstruction_errors(identifier, epoch, g_tolerance=0.05, max_samples=1
         noisy_errors = errors['noisy']
         print('Loaded precomputed errors')
     except FileNotFoundError:
-        n_eval = 500
-        # generate "easy" samples from the distribution
-        generated = model.sample_trained_model(settings, epoch, n_eval)
-        # generate "hard' random samples, not from train/test distribution
-        # TODO: use original validation examples, add noise etc.
-    ##    random_samples = np.random.normal(size=generated.shape)
-    #    random_samples -= np.mean(random_samples, axis=0) 
-    #    random_samples += np.mean(vali, axis=0)
-    #    random_samples /= np.std(random_samples, axis=0)
-    #    random_samples *= np.std(vali, axis=0)
+        if tstr:
+            synth_data = np.load('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy').item()
+            generated = synth_data['samples']
+            synth_labels = synth_data['labels']
+            train_labels = labels['train']
+            test_labels = labels['test']
+            vali_labels = labels['vali']
+        else:
+            # generate new data
+            n_eval = 500
+            # generate "easy" samples from the distribution
+            generated = model.sample_trained_model(settings, epoch, n_eval)
+            # generate "hard' random samples, not from train/test distribution
+            # TODO: use original validation examples, add noise etc.
+        ##    random_samples = np.random.normal(size=generated.shape)
+        #    random_samples -= np.mean(random_samples, axis=0) 
+        #    random_samples += np.mean(vali, axis=0)
+        #    random_samples /= np.std(random_samples, axis=0)
+        #    random_samples *= np.std(vali, axis=0)
 
         # get all the errors
         print('Getting reconstruction errors on train set')
         if train.shape[0] > max_samples:
-            train = np.random.permutation(train)[:max_samples]
-        train_errors = error_per_sample(identifier, epoch, train, n_rep=5, g_tolerance=g_tolerance)
+            index_subset = np.random.permutation(train.shape[0])[:max_samples]
+            train = train[index_subset]
+            if train_labels is not None:
+                train_labels = train_labels[index_subset]
+        train_errors = error_per_sample(identifier, epoch, train, n_rep=5, g_tolerance=g_tolerance, C_samples=train_labels)
         print('Getting reconstruction errors on test set')
         if test.shape[0] > max_samples:
-            test = np.random.permutation(test)[:max_samples]
-        test_errors = error_per_sample(identifier, epoch, test, n_rep=5, g_tolerance=g_tolerance)
+            index_subset = np.random.permutation(test.shape[0])[:max_samples]
+            test = test[index_subset]
+            if test_labels is not None:
+                test_labels = test_labels[index_subset]
+        test_errors = error_per_sample(identifier, epoch, test, n_rep=5, g_tolerance=g_tolerance, C_samples=test_labels)
+        D_test, p_test = ks_2samp(train_errors, test_errors)
+        print('KS statistic and p-value for train v. test erors:', D_test, p_test)
+        pdb.set_trace()
         print('Getting reconstruction errors on generated set')
-        generated_errors = error_per_sample(identifier, epoch, generated, n_rep=5, g_tolerance=g_tolerance)
-        print('Getting reconstruction errors on noisy set')
-        alpha = 0.5
-        noisy_samples = alpha*vali + (1-alpha)*np.random.permutation(vali)
-        noisy_errors = error_per_sample(identifier, epoch, noisy_samples, n_rep=5, g_tolerance=g_tolerance)
+        generated_errors = error_per_sample(identifier, epoch, generated, n_rep=5, g_tolerance=g_tolerance, C_samples=synth_labels)
+        D_gen, p_gen = ks_2samp(generated_errors, train_errors)
+        print('KS statistic and p-value for train v. gen erors:', D_gen, p_gen)
+        D_gentest, p_gentest = ks_2samp(generated_errors, test_errors)
+        print('KS statistic and p-value for gen v. test erors:', D_gentest, p_gentest)
+#        print('Getting reconstruction errors on noisy set')
+#        alpha = 0.5
+#        noisy_samples = alpha*vali + (1-alpha)*np.random.permutation(vali)
+#        noisy_errors = error_per_sample(identifier, epoch, noisy_samples, n_rep=5, g_tolerance=g_tolerance, C_samples=vali_labels)
+        noisy_errors = None
         # save!
         errors = {'train': train_errors, 'test': test_errors, 'generated': generated_errors, 'noisy': noisy_errors}
         np.save('./experiments/eval/' + identifier + '_' + str(epoch) + '_' + str(g_tolerance) + '.reconstruction_errors.npy', errors)
@@ -209,7 +258,7 @@ def get_reconstruction_errors(identifier, epoch, g_tolerance=0.05, max_samples=1
 #    plotting.save_plot_sample(random_samples[hardest_random], epoch, identifier + '_hardrandom', n_samples=6, num_epochs=None, ncol=2)
     return True
 
-def error_per_sample(identifier, epoch, samples, n_rep=3, n_iter=None, g_tolerance=0.025, use_min=True):
+def error_per_sample(identifier, epoch, samples, n_rep=3, n_iter=None, g_tolerance=0.025, use_min=True, C_samples=None):
     """
     Get (average over a few runs) of the reconstruction error per sample
     """
@@ -217,7 +266,7 @@ def error_per_sample(identifier, epoch, samples, n_rep=3, n_iter=None, g_toleran
     heuristic_sigma = np.float32(mmd.median_pairwise_distance(samples))
     errors = np.zeros(shape=(n_samples, n_rep))
     for rep in range(n_rep):
-        Z, rep_errors, sigma = model.invert(identifier, epoch, samples, n_iter=n_iter, heuristic_sigma=heuristic_sigma, g_tolerance=g_tolerance)
+        Z, rep_errors, sigma = model.invert(identifier, epoch, samples, n_iter=n_iter, heuristic_sigma=heuristic_sigma, g_tolerance=g_tolerance, C_samples=C_samples)
         errors[:, rep] = rep_errors
     # return min, or average?
     if use_min:
@@ -342,97 +391,293 @@ def sample_distance(sampleA, sampleB, sigma):
 
 ### --- TSTR ---- ###
 
-def TSTR_mnist(identifier, epoch):
+def train_CNN(train_X, train_Y, vali_X, vali_Y, test_X):
     """
+    Train a CNN (code copied/adapted from Cristobal's mnist_keras_trts_0_2)
+	(ONLY MNIST, ONLY 14x14)
+    (ONLY DIGITS UP TO 3)
+    """
+    print('Training CNN!')
+    input_shape = (14,14,1)
+    batch_size = 128
+    num_classes = 3
+    epochs = 1000
+
+    m = Sequential()
+    m.add(Conv2D(16, kernel_size=(3, 3),
+                        activation='relu',
+                        input_shape=input_shape))
+    m.add(Conv2D(32, (3, 3), activation='relu'))
+    m.add(MaxPooling2D(pool_size=(2, 2)))
+    m.add(Dropout(0.25))
+    m.add(Flatten())
+    m.add(Dense(128, activation='relu'))
+    m.add(Dropout(0.5))
+    m.add(Dense(num_classes, activation='softmax'))
+
+    m.compile(loss=keras.losses.categorical_crossentropy,
+            optimizer=keras.optimizers.Adadelta(),
+            metrics=['accuracy'])
+
+    earlyStopping=keras.callbacks.EarlyStopping(monitor='val_loss', patience=0, verbose=1, mode='auto')
+    m.fit(np.expand_dims(train_X, axis=-1), train_Y,
+            batch_size=batch_size,
+            epochs=epochs,
+            verbose=1,
+            validation_data=(np.expand_dims(vali_X, axis=-1), vali_Y),
+            callbacks=[earlyStopping])
+    test_predictions = m.predict(np.expand_dims(test_X, axis=-1))
+    return test_predictions
+
+def TSTR_mnist(identifier, epoch, generate=True, duplicate_synth=1, vali=True, CNN=False, reverse=False):
+    """
+    Either load or generate synthetic training, real test data...
     Load synthetic training, real test data, do multi-class SVM
     (basically just this: http://scikit-learn.org/stable/auto_examples/classification/plot_digits_classification.html)
+
+    If reverse = True: do TRTS
     """
-    exp_data = np.load('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy').item()
-    test_X, test_Y = exp_data['test_data'], exp_data['test_labels']
-    train_X, train_Y = exp_data['train_data'], exp_data['train_labels']
-    synth_X, synth_Y = exp_data['synth_data'], exp_data['synth_labels']
-    # if multivariate, reshape
-    if len(test_X.shape) == 3:
-        test_X = test_X.reshape(test_X.shape[0], -1)
-    if len(train_X.shape) == 3:
-        train_X = train_X.reshape(train_X.shape[0], -1)
-    if len(synth_X.shape) == 3:
-        synth_X = synth_X.reshape(synth_X.shape[0], -1)
-    # if one hot, fix
-    if len(synth_Y.shape) > 1 and not synth_Y.shape[1] == 1:
-        synth_Y = np.argmax(synth_Y, axis=1)
-        train_Y = np.argmax(train_Y, axis=1)
-        test_Y = np.argmax(test_Y, axis=1)
+    print('Running TSTR on', identifier, 'at epoch', epoch)
+    if vali:
+        test_set = 'vali'
+    else:
+        test_set = 'test'
+    if generate:
+        data = np.load('./experiments/data/' + identifier + '.data.npy').item()
+        samples = data['samples']
+        train_X = samples['train']
+        test_X = samples[test_set]
+        labels = data['labels']
+        train_Y = labels['train']
+        test_Y = labels[test_set]
+        # now sample from the model
+        synth_Y = np.tile(train_Y, [duplicate_synth, 1])
+        synth_X = model.sample_trained_model(identifier, epoch, num_samples=synth_Y.shape[0], C_samples=synth_Y)
+        # for use in TRTS
+        synth_testX = model.sample_trained_model(identifier, epoch, num_samples=test_Y.shape[0], C_samples=test_Y)
+        synth_data = {'samples': synth_X, 'labels': synth_Y, 'test_samples': synth_testX, 'test_labels': test_Y}
+        np.save('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy', synth_data)
+    else:
+        print('Loading synthetic data from pre-sampled model')
+        exp_data = np.load('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy').item()
+        test_X, test_Y = exp_data['test_data'], exp_data['test_labels']
+        train_X, train_Y = exp_data['train_data'], exp_data['train_labels']
+        synth_X, synth_Y = exp_data['synth_data'], exp_data['synth_labels']
+    if reverse:
+        which_setting = 'trts'
+        print('Swapping synthetic test set in for real, to do TRTS!')
+        test_X = synth_testX
+    else:
+        print('Doing normal TSTR')
+        which_setting = 'tstr'
     # make classifier
-    synth_classifier = SVC(gamma=0.001)
-    real_classifier = SVC(gamma=0.001)
-    # fit
-    real_classifier.fit(train_X, train_Y)
-    synth_classifier.fit(synth_X, synth_Y)
-    # test on real
-    synth_predY = synth_classifier.predict(test_X)
-    real_predY = real_classifier.predict(test_X)
+    if not CNN:
+        model_choice = 'RF'
+         # if multivariate, reshape
+        if len(test_X.shape) == 3:
+            test_X = test_X.reshape(test_X.shape[0], -1)
+        if len(train_X.shape) == 3:
+            train_X = train_X.reshape(train_X.shape[0], -1)
+        if len(synth_X.shape) == 3:
+            synth_X = synth_X.reshape(synth_X.shape[0], -1)
+        # if one hot, fix
+        if len(synth_Y.shape) > 1 and not synth_Y.shape[1] == 1:
+            synth_Y = np.argmax(synth_Y, axis=1)
+            train_Y = np.argmax(train_Y, axis=1)
+            test_Y = np.argmax(test_Y, axis=1)
+       # random forest
+        #synth_classifier = SVC(gamma=0.001)
+        #real_classifier = SVC(gamma=0.001)
+        synth_classifier = RandomForestClassifier(n_estimators=500)
+        real_classifier = RandomForestClassifier(n_estimators=500)
+        # fit
+        real_classifier.fit(train_X, train_Y)
+        synth_classifier.fit(synth_X, synth_Y)
+        # test on real
+        synth_predY = synth_classifier.predict(test_X)
+        real_predY = real_classifier.predict(test_X)
+    else:
+        model_choice = 'CNN'
+        synth_predY = train_CNN(synth_X, synth_Y, samples['vali'], labels['vali'], test_X)
+        clear_session()
+        real_predY = train_CNN(train_X, train_Y, samples['vali'], labels['vali'], test_X)
+        clear_session()
+        # CNN setting is all 'one-hot'
+        test_Y = np.argmax(test_Y, axis=1)
+        synth_predY = np.argmax(synth_predY, axis=1)
+        real_predY = np.argmax(real_predY, axis=1)
+    
     # report on results
+    synth_prec, synth_recall, synth_f1, synth_support = precision_recall_fscore_support(test_Y, synth_predY, average='weighted')
+    synth_accuracy = accuracy_score(test_Y, synth_predY)
+    synth_auprc = 'NaN'
+    synth_auroc = 'NaN'
+    synth_scores = [synth_prec, synth_recall, synth_f1, synth_accuracy, synth_auprc, synth_auroc]
+    real_prec, real_recall, real_f1, real_support = precision_recall_fscore_support(test_Y, real_predY, average='weighted')
+    real_accuracy = accuracy_score(test_Y, real_predY)
+    real_auprc = 'NaN'
+    real_auroc = 'NaN'
+    real_scores = [real_prec, real_recall, real_f1, real_accuracy, real_auprc, real_auroc]
+    
+    all_scores = synth_scores + real_scores
+
+    if vali:
+        report_file = open('./experiments/tstr/vali.' + which_setting + '_report.v3.csv', 'a')
+        report_file.write('mnist,' + identifier + ',' + model_choice + ',' + str(epoch) + ',' + ','.join(map(str, all_scores)) + '\n')
+        report_file.close()
+    else:
+        report_file = open('./experiments/tstr/' + which_setting + '_report.v3.csv', 'a')
+        report_file.write('mnist,' + identifier + ',' + model_choice + ',' + str(epoch) + ',' + ','.join(map(str, all_scores)) + '\n')
+        report_file.close()
+        # visualise results
+        try:
+            plotting.view_mnist_eval(identifier + '_' + str(epoch), train_X, train_Y, synth_X, synth_Y, test_X, test_Y, synth_predY, real_predY)
+        except ValueError:
+            print('PLOTTING ERROR')
+            pdb.set_trace()
     print(classification_report(test_Y, synth_predY))
     print(classification_report(test_Y, real_predY))
-    # visualise results
-    plotting.view_mnist_eval(identifier + '_' + str(epoch), train_X, train_Y, synth_X, synth_Y, test_X, test_Y, synth_predY, real_predY)
-    return True
+    return synth_f1, real_f1
 
-def TSTR_eICU(identifier, epoch):
+def TSTR_eICU(identifier, epoch, generate=True, vali=True, CNN=False, do_OR=False, duplicate_synth=1, reverse=False):
     """
     """
-    # get "train" data
-    exp_data = np.load('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy').item()
-    X_synth = exp_data['synth_data']
-    Y_synth = exp_data['synth_labels']
-    n_synth = X_synth.shape[0]
-    X_synth = X_synth.reshape(n_synth, -1)
-    # get test data
-    data = np.load('./data/eICU_task_data.npy').item()
-    X_test = data['X_test']
-    Y_test = data['Y_test']
-    # iterate over labels
-    results = []
-    for label in range(Y_synth.shape[1]):
-        print('task:', data['Y_columns'][label])
-        print('(', np.mean(Y_synth[:, label]), 'positive in train, ', np.mean(Y_test[:, label]), 'in test)')
-        #model = RandomForestClassifier(n_estimators=50).fit(X_synth, Y_synth[:, label])
-        model = SVC(gamma=0.001).fit(X_synth, Y_synth[:, label])
-        predict = model.predict(X_test)
-        print('(predicted', np.mean(predict), 'positive labels)')
-        accuracy = sklearn.metrics.accuracy_score(Y_test[:, label], predict)
-        precision = sklearn.metrics.precision_score(Y_test[:, label], predict)
-        recall = sklearn.metrics.recall_score(Y_test[:, label], predict)
-        print('\tacc:', accuracy, '\tprec:', precision, '\trecall:', recall)
-        results.append([accuracy, precision, recall])
-    # do the OR task
-    extreme_heartrate_test = Y_test[:, 1] + Y_test[:, 4]
-    extreme_respiration_test = Y_test[:, 2] + Y_test[:, 5]
-    extreme_systemicmean_test = Y_test[:, 3] + Y_test[:, 6]
-    Y_OR_test = np.vstack([extreme_heartrate_test, extreme_respiration_test, extreme_systemicmean_test]).T
-    Y_OR_test = (Y_OR_test > 0)*1
+    if vali:
+        test_set = 'vali'
+    else:
+        test_set = 'test'
+    data = np.load('./experiments/data/' + identifier + '.data.npy').item()
+    samples = data['samples']
+    train_X = samples['train']
+    test_X = samples[test_set]
+    labels = data['labels']
+    train_Y = labels['train']
+    test_Y = labels[test_set]
+    if generate:
+        # now sample from the model
+        synth_Y = np.tile(train_Y, [duplicate_synth, 1])
+        synth_X = model.sample_trained_model(identifier, epoch, num_samples=synth_Y.shape[0], C_samples=synth_Y)
+        # for use in TRTS
+        synth_testX = model.sample_trained_model(identifier, epoch, num_samples=test_Y.shape[0], C_samples=test_Y)
+        synth_data = {'samples': synth_X, 'labels': synth_Y, 'test_samples': synth_testX, 'test_labels': test_Y}
+        np.save('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy', synth_data)
+    else:
+        print('Loading pre-generated data')
+        print('WARNING: not implemented for TRTS')
+        # get "train" data
+        exp_data = np.load('./experiments/tstr/' + identifier + '_' + str(epoch) + '.data.npy').item()
+        synth_X = exp_data['samples']
+        synth_Y = exp_data['labels']
+        n_synth = synth_X.shape[0]
+        synth_X = synth_X.reshape(n_synth, -1)
+    #    pdb.set_trace()
+    #    # ALERT ALERT MODIFYING
+    #    synth_X = 2*(synth_X > 0) - 1
+    orig_data = np.load('/cluster/home/hyland/eICU_task_data.npy').item()
+    if reverse:
+        which_setting = 'trts'
+    # visualise distribution of errors for train and test
+        print('Swapping synthetic test set in for real, to do TRTS!')
+        test_X = synth_testX
+    else:
+        print('Doing normal TSTR')
+        which_setting = 'tstr'
+#    # get test data
+#    test_X = data['test_X']
+#    test_Y = data['test_Y']
+    if not CNN:
+        model_choice = 'RF'
+         # if multivariate, reshape
+        if len(test_X.shape) == 3:
+            test_X = test_X.reshape(test_X.shape[0], -1)
+        if len(train_X.shape) == 3:
+            train_X = train_X.reshape(train_X.shape[0], -1)
+        if len(synth_X.shape) == 3:
+            synth_X = synth_X.reshape(synth_X.shape[0], -1)
+    else:
+        raise ValueError(CNN)
+        model_choice = 'CNN'
+    # we will select the best validation set epoch based on F1 score, take average across all the tasks
+    score_list = []
+    for label in range(synth_Y.shape[1]):
+        task = orig_data['Y_columns'][label]
+        if vali:
+            if not task in ['low_sao2', 'high_heartrate', 'low_respiration']:
+                print('Skipping task', task, 'because validation evaluation.')
+                continue
+        print('Evaluating on task:', task)
+        #print('(', np.mean(synth_Y[:, label]), 'positive in train, ', np.mean(test_Y[:, label]), 'in test)')
+        #m = RandomForestClassifier(n_estimators=50).fit(synth_X, synth_Y[:, label])
+        #m = SVC(gamma=0.001).fit(synth_X, synth_Y[:, label])
+        synth_classifier = RandomForestClassifier(n_estimators=100).fit(synth_X, synth_Y[:, label])
+        synth_predY = synth_classifier.predict(test_X)
+        synth_predY_prob = synth_classifier.predict_proba(test_X)[:, 1]
+        real_classifier = RandomForestClassifier(n_estimators=100).fit(train_X, train_Y[:, label])
+        real_predY = real_classifier.predict(test_X)
+        real_predY_prob = real_classifier.predict_proba(test_X)[:, 1]
+        #print('(predicted', np.mean(predict), 'positive labels)')
+        
+        synth_prec, synth_recall, synth_f1, synth_support = precision_recall_fscore_support(test_Y[:, label], synth_predY, average='weighted')
+        synth_accuracy = accuracy_score(test_Y[:, label], synth_predY)
+        synth_auprc = average_precision_score(test_Y[:, label], synth_predY_prob)
+        synth_auroc = roc_auc_score(test_Y[:, label], synth_predY_prob)
+        synth_scores = [synth_prec, synth_recall, synth_f1, synth_accuracy, synth_auprc, synth_auroc]
 
-    extreme_heartrate_synth = Y_synth[:, 1] + Y_synth[:, 4]
-    extreme_respiration_synth = Y_synth[:, 2] + Y_synth[:, 5]
-    extreme_systemicmean_synth = Y_synth[:, 3] + Y_synth[:, 6]
-    Y_OR_synth = np.vstack([extreme_heartrate_synth, extreme_respiration_synth, extreme_systemicmean_synth]).T
-    Y_OR_synth = (Y_OR_synth > 0)*1
+        real_prec, real_recall, real_f1, real_support = precision_recall_fscore_support(test_Y[:, label], real_predY, average='weighted')
+        real_accuracy = accuracy_score(test_Y[:, label], real_predY)
+        real_auprc = average_precision_score(test_Y[:, label], real_predY_prob)
+        real_auroc = roc_auc_score(test_Y[:, label], real_predY_prob)
+        real_scores = [real_prec, real_recall, real_f1, real_accuracy, real_auprc, real_auroc]
+        
+        all_scores = synth_scores + real_scores
 
-    OR_names = ['extreme heartrate', 'extreme respiration', 'extreme MAP']
-    OR_results = []
-    for label in range(Y_OR_synth.shape[1]):
-        print('task:', OR_names[label])
-        print('(', np.mean(Y_OR_synth[:, label]), 'positive in train, ', np.mean(Y_OR_test[:, label]), 'in test)')
-        model = RandomForestClassifier(n_estimators=50).fit(X_synth, Y_OR_synth[:, label])
-        predict = model.predict(X_test)
-        print('(predicted', np.mean(predict), 'positive labels)')
-        accuracy = sklearn.metrics.accuracy_score(Y_OR_test[:, label], predict)
-        precision = sklearn.metrics.precision_score(Y_OR_test[:, label], predict)
-        recall = sklearn.metrics.recall_score(Y_OR_test[:, label], predict)
-        print(accuracy, precision, recall)
-        OR_results.append([accuracy, precision, recall])
-    return results, OR_results
+        if vali:
+            report_file = open('./experiments/tstr/vali.' + which_setting + '_report.v3.csv', 'a')
+            report_file.write('eICU_' + task + ',' + identifier + ',' + model_choice + ',' + str(epoch) + ',' + ','.join(map(str, all_scores)) + '\n')
+            report_file.close()
+        else:
+            report_file = open('./experiments/tstr/' + which_setting + '_report.v3.csv', 'a')
+            report_file.write('eICU_' + task + ',' + identifier + ',' + model_choice + ',' + str(epoch) + ',' + ','.join(map(str, all_scores)) + '\n')
+            report_file.close()
+        
+        print(classification_report(test_Y[:, label], synth_predY))
+        print(classification_report(test_Y[:, label], real_predY))
+        if task in ['low_sao2', 'high_heartrate', 'low_respiration']:
+            score_list.append(synth_auprc + synth_auroc)
+
+    if do_OR:
+        raise NotImplementedError
+        # do the OR task
+        extreme_heartrate_test = test_Y[:, 1] + test_Y[:, 4]
+        extreme_respiration_test = test_Y[:, 2] + test_Y[:, 5]
+        extreme_systemicmean_test = test_Y[:, 3] + test_Y[:, 6]
+        Y_OR_test = np.vstack([extreme_heartrate_test, extreme_respiration_test, extreme_systemicmean_test]).T
+        Y_OR_test = (Y_OR_test > 0)*1
+
+        extreme_heartrate_synth = synth_Y[:, 1] + synth_Y[:, 4]
+        extreme_respiration_synth = synth_Y[:, 2] + synth_Y[:, 5]
+        extreme_systemicmean_synth = synth_Y[:, 3] + synth_Y[:, 6]
+        Y_OR_synth = np.vstack([extreme_heartrate_synth, extreme_respiration_synth, extreme_systemicmean_synth]).T
+        Y_OR_synth = (Y_OR_synth > 0)*1
+
+        OR_names = ['extreme heartrate', 'extreme respiration', 'extreme MAP']
+        OR_results = []
+        for label in range(Y_OR_synth.shape[1]):
+            print('task:', OR_names[label])
+            print('(', np.mean(Y_OR_synth[:, label]), 'positive in train, ', np.mean(Y_OR_test[:, label]), 'in test)')
+            m = RandomForestClassifier(n_estimators=500).fit(synth_X, Y_OR_synth[:, label])
+            predict = m.predict(X_test)
+            print('(predicted', np.mean(predict), 'positive labels)')
+            accuracy = accuracy_score(Y_OR_test[:, label], predict)
+            precision = sklearn.metrics.precision_score(Y_OR_test[:, label], predict)
+            recall = sklearn.metrics.recall_score(Y_OR_test[:, label], predict)
+            print(accuracy, precision, recall)
+            OR_results.append([accuracy, precision, recall])
+    else:
+        OR_results = []
+
+    score_across_tasks = np.mean(np.array(score_list))
+    return score_across_tasks
 
 def NIPS_toy_plot(identifier_rbf, epoch_rbf, identifier_sine, epoch_sine, identifier_mnist, epoch_mnist):
     """
