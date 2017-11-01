@@ -18,6 +18,10 @@ Sharing medical data is hard, because it comes from real people, and is naturall
 #### When is data 'sufficiently realistic'?
 We claim in this paper, that synthetic data is useful when it can be used to train a model which can perform well on real data. So, we use the performance of a classifier _trained_ on the synthetic data, then _tested_ on real data as a measure of the quality of the data. We call this the "**TSTR** score". This is a way of evaluating the output of a GAN without relying on human perceptual judgements of individual samples.
 
+#### Differential privacy
+
+We also include the case where the GAN is trained in a differentially private manner, to provide stronger privacy guarantees for the training data. We mostly just use the differentially private SGD optimiser and the moments accountant from [here](https://github.com/tensorflow/models/tree/master/research/differential_privacy) (with some minor modifications).
+
 ## Code Quickstart
 
 Primary dependencies: `tensorflow`, `scipy`, `numpy`, `pandas`
@@ -30,9 +34,12 @@ git clone git@github.com:ratschlab/RGAN.git
 cd RGAN
 python experiment.py --settings_file test
 ```
+
+Note: the `test` settings file is a dummy to demonstrate which options exist, and may not produce reasonable looking output.
+
 ## Expected Directory Structure
 
-TODO 
+See the directories in this folder: https://github.com/ratschlab/RGAN/tree/master/experiments 
 
 ## Files in this Repository
 
@@ -66,6 +73,6 @@ Get MNIST as CSVs here: https://pjreddie.com/projects/mnist-in-csv/
 
 ### eICU
 
-http://eicu-crd.mit.edu/about/eicu/
+eICU is access-restricted, and must be applied for. For more information: http://eicu-crd.mit.edu/about/eicu/
 
 TODO: describe how we preprocess eICU/upload script for doing it
