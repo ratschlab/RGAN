@@ -11,6 +11,8 @@ import math
 from data_utils import get_eICU_with_targets
 import plotting
 
+import model
+
 # function for getting one mini batch
 def get_batch(samples, labels, batch_size, batch_idx):
     start_pos = batch_idx * batch_size
@@ -23,7 +25,7 @@ if not os.path.isdir(wd):
     os.mkdir(wd)
 
 # runs the experiment 5 times
-identifiers = ['eICU_cdgan_synthetic_dataset_r' + str(i) for i in range(5)]
+identifiers = ['eICU_cdgan_synthetic_dataset_r' + str(i) for i in range(2,5)]
 
 for identifier in identifiers:
 
@@ -251,3 +253,6 @@ for identifier in identifiers:
 
             with open(wd + '/labels_' + identifier + '_' + str(num_epoch) + '.pk', 'wb') as f:
                 pickle.dump(file=f, obj=labels_gen_samples)
+
+            # save the model used to generate this dataset
+            model.dump_parameters(identifier + '_' + str(num_epoch), sess)
