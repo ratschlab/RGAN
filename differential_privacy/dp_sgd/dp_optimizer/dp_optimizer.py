@@ -1,3 +1,6 @@
+# (originally from https://github.com/tensorflow/models/tree/master/research/differential_privacy,
+# possibly with some small edits by @corcra)
+
 # Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +23,7 @@ from __future__ import division
 import tensorflow as tf
 
 from differential_privacy.dp_sgd.dp_optimizer import utils
-from differential_privacy.dp_sgd.per_example_gradients import per_example_gradients
+#from differential_privacy.dp_sgd.per_example_gradients import per_example_gradients
 
 import pdb
 
