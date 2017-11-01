@@ -1,3 +1,5 @@
+# (originally from https://github.com/tensorflow/models/tree/master/research/differential_privacy,
+# possibly with some small edits by @corcra)
 # Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
