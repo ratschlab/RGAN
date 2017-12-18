@@ -5,8 +5,10 @@ import re
 from time import time
 import json
 import random
+import os
 
 import model
+import paths
 
 from scipy.spatial.distance import pdist, squareform
 from scipy.stats import multivariate_normal, invgamma, mode
@@ -164,13 +166,13 @@ def normalise_data(train, vali, test, low=-1, high=1):
     normalised_vali = (vali - mean)/std
     normalised_test = (test - mean)/std
 #    normalised_data = data - np.nanmean(data, axis=(0, 1))
-#    normalised_data /= np.std(data, axis=(0, 1))    
+#    normalised_data /= np.std(data, axis=(0, 1))
 
 #    # normalise samples to be between -1 and +1
     # normalise just using train and vali
 #    min_val = np.nanmin(np.vstack([train, vali]), axis=(0, 1))
 #    max_val = np.nanmax(np.vstack([train, vali]), axis=(0, 1))
-#    
+#
 #    normalised_train = (train - min_val)/(max_val - min_val)
 #    normalised_train = (high - low)*normalised_train + low
 #
@@ -325,7 +327,7 @@ def load_resized_mnist_0_5(new_size, randomize=False):
     samples = samples[np.in1d(labels,[0,1,2,3,4,5])]
     labels = labels[np.in1d(labels,[0,1,2,3,4,5])]
     if new_size != 28:
-        resized_imgs = [imresize(img.reshape([28,28]), [new_size,new_size], interp='lanczos').ravel()[np.newaxis].T 
+        resized_imgs = [imresize(img.reshape([28,28]), [new_size,new_size], interp='lanczos').ravel()[np.newaxis].T
                         for img in samples]
         resized_imgs = np.array(resized_imgs)
         resized_imgs = resized_imgs.astype(float)
@@ -358,25 +360,23 @@ def load_resized_mnist(new_size, from_to_digits=(0,2), randomize=False):
     else:
         return samples, labels
 
-def resampled_eICU(seq_length=16, resample_rate_in_min=15, 
+def resampled_eICU(seq_length=16, resample_rate_in_min=15,
         variables=['sao2', 'heartrate', 'respiration', 'systemicmean'], **kwargs):
     """
     Note: resampling rate is 15 minutes
     """
     print('Getting resampled eICU data')
-    base_dir = 'REDACTED'
-    if not resample_rate_in_min == 15:
-        raise NotImplementedError(resample_rate_in_min)
     try:
-        data = np.load(base_dir + 'eICU_' + str(resample_rate_in_min) + '.npy').item()
+        data = np.load(paths.eICU_proc_dir + 'eICU_' + str(resample_rate_in_min) + '.npy').item()
         samples = data['samples']
         pids = data['pids']
         print('Loaded from file!')
         return samples, pids
     except FileNotFoundError:
+        # in this case, we go into the main logic of the function
         pass
-    resampled_data_path = base_dir + 'resampled_pats_' + str(resample_rate_in_min) + 'min.csv'
-    resampled_pids_path = base_dir + 'cohort_complete_resampled_pats_' + str(resample_rate_in_min) + 'min.csv'
+    resampled_data_path = paths.eICU_proc_dir + 'complete_resampled_pats_' + str(resample_rate_in_min) + 'min.csv'
+    resampled_pids_path = paths.eICU_proc_dir + 'cohort_complete_resampled_pats_' + str(resample_rate_in_min) + 'min.csv'
 
     if not os.path.isfile(resampled_data_path):
         generate_eICU_resampled_patients(resample_factor_in_min=resample_rate_in_min, upto_in_minutes=None)
@@ -411,11 +411,11 @@ def resampled_eICU(seq_length=16, resample_rate_in_min=15,
         pids.append(patient)
     assert i == n_patients - 1
     assert np.mean(np.isnan(samples) == 0)
-    np.save(base_dir + 'eICU_' + str(resample_rate_in_min) + '.npy', {'samples': samples, 'pids': pids})
+    np.save(paths.eICU_proc_dir + 'eICU_' + str(resample_rate_in_min) + '.npy', {'samples': samples, 'pids': pids})
     print('Saved to file!')
     return samples, pids
 
-def sine_wave(seq_length=30, num_samples=28*5*100, num_signals=1, 
+def sine_wave(seq_length=30, num_samples=28*5*100, num_signals=1,
         freq_low=1, freq_high=5, amplitude_low = 0.1, amplitude_high=0.9, **kwargs):
     ix = np.arange(seq_length) + 1
     samples = []
@@ -433,12 +433,12 @@ def sine_wave(seq_length=30, num_samples=28*5*100, num_signals=1,
     return samples
 
 def periodic_kernel(T, f=1.45/30, gamma=7.0, A=0.1):
-    """ 
+    """
     Calculates periodic kernel between all pairs of time points (there
     should be seq_length of those), returns the Gram matrix.
     f is frequency - higher means more peaks
     gamma is a scale, smaller makes the covariance peaks shallower (smoother)
-    
+
     Heuristic for non-singular rbf:
         periodic_kernel(np.arange(len), f=1.0/(0.79*len), A=1.0, gamma=len/4.0)
     """
@@ -463,7 +463,7 @@ def GP(seq_length=30, num_samples=28*5*100, num_signals=1, scale=0.1, kernel='rb
     # define the distribution
     mu = np.zeros(seq_length)
     print(np.linalg.det(cov))
-    distribution = multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov) 
+    distribution = multivariate_normal(mean=np.zeros(cov.shape[0]), cov=cov)
     pdf = distribution.logpdf
     # now generate samples
     for i in range(num_signals):
@@ -501,7 +501,7 @@ def linear(seq_length=30, num_samples=28*5*100, a0=10, b0=0.01, k=2, **kwargs):
 
     The invgamma function in scipy corresponds to wiki defn. of inverse gamma:
         scipy a = wiki alpha = a0
-        scipy scale = wiki beta = b0 
+        scipy scale = wiki beta = b0
 
     k is the number of regression coefficients (just 2 here, slope and intercept)
     """
@@ -589,7 +589,7 @@ def changepoint_cristobal(seq_length=30, num_samples=28*5*100):
     signal_b_target = (basal_values_signal_b + trends.T).T
     time_noise = np.random.randn(n_samples, n_steps) * 0.01
     signal_b_target = time_noise + signal_b_target
-    
+
     signal_multipliers = []
     for ts in time_steps_until_change:
         signal_multiplier = []
@@ -654,7 +654,7 @@ def changepoint(seq_length=30, num_samples=28*5*100):
         T_m = T[:m].reshape(m, 1)
         cov_m = A*kernel(T_m.reshape(-1, 1), T_m.reshape(-1, 1))
         cov_ms.append(cov_m)
-        # the second part 
+        # the second part
         T_M = T[m:].reshape(M, 1)
         cov_mM = kernel(T_M.reshape(-1, 1), T_m.reshape(-1, 1))
         cov_M = sigmasq*(np.eye(M) - lamb*np.dot(np.dot(cov_mM, np.linalg.inv(cov_m)), cov_mM.T))
@@ -682,47 +682,67 @@ def changepoint(seq_length=30, num_samples=28*5*100):
     pdf = partial(changepoint_pdf, cov_ms=cov_ms, cov_Ms=cov_Ms)
     return samples, pdf, m_s
 
-def generate_eICU_resampled_patients(resample_factor_in_min=15, 
+def resample_eICU_patient(pid, resample_factor_in_min, variables, upto_in_minutes):
+    """
+    Resample a *single* patient.
+    """
+    pat_df = pd.read_hdf(paths.eICU_hdf_dir + '/vitalPeriodic.h5',
+                         where='patientunitstayid = ' + str(pid),
+                         columns=['observationoffset', 'patientunitstayid'] + variables,
+                         mode='r')
+    # sometimes it's empty
+    if pat_df.empty:
+        return None
+    if not upto_in_minutes is None:
+        pat_df = pat_df.loc[0:upto_in_minutes*60]
+    # convert the offset to a TimedeltaIndex (necessary for resampling)
+    pat_df.observationoffset = pd.TimedeltaIndex(pat_df.observationoffset, unit='m')
+    pat_df.set_index('observationoffset', inplace=True)
+    pat_df.sort_index(inplace=True)
+    # resample by time
+    pat_df_resampled = pat_df.resample(str(resample_factor_in_min) + 'T').median()  # pandas ignores NA in median by default
+    # rename pid, cast to int
+    pat_df_resampled.rename(columns={'patientunitstayid': 'pid'}, inplace=True)
+    pat_df_resampled['pid'] = np.int32(pat_df_resampled['pid'])
+    # get offsets in minutes from index
+    pat_df_resampled['offset'] = np.int32(pat_df_resampled.index.total_seconds()/60)
+    return pat_df_resampled
+
+def generate_eICU_resampled_patients(resample_factor_in_min=15,
         upto_in_minutes=None):
     """
-    Generates a dataframe with resampled patients. One sample every 15 miniutes
-
+    Generates a dataframe with resampled patients. One sample every "resample_factor_in_min" minutes.
     """
-    data_path = 'REDACTED'
-    pids = pd.read_csv(data_path)
-    pids = np.array(pids).flatten()
+    pids = set(np.loadtxt(paths.eICU_proc_dir + 'pids.txt', dtype=int))
+    exclude_pids = set(np.loadtxt(paths.eICU_proc_dir + 'pids_missing_vitals.txt', dtype=int))
+    print('Excluding', len(exclude_pids), 'patients for not having vitals information')
+    pids = pids.difference(exclude_pids)
 
-    eICU_dir = 'REDACTED'
     variables = ['sao2', 'heartrate', 'respiration', 'systemicmean']
 
-    for num_pat, patient in enumerate(pids):    # have to go patient by patient
-        pat_df = pd.read_hdf(eICU_dir + '/vitalPeriodic.h5', 
-                             where='patientunitstayid = ' + str(patient), 
-                             columns=['observationoffset', 'patientunitstayid'] + variables, 
-                             mode='r')
-        if not upto_in_minutes is None:
-            pat_df = pat_df.loc[0:upto_in_minutes*60]
-        # convert the offset to a TimedeltaIndex (necessary for resampling)
-        pat_df.observationoffset = pd.TimedeltaIndex(pat_df.observationoffset, unit='m')
-        pat_df.set_index('observationoffset', inplace=True)
-        pat_df.sort_index(inplace=True)
-        # resample by time
-        pat_df_resampled = pat_df.resample(str(resample_factor_in_min) + 'T').median()  # pandas ignores NA in median by default
-        # rename pid, cast to int
-        pat_df_resampled.rename(columns={'patientunitstayid': 'pid'}, inplace=True)
-        pat_df_resampled['pid'] = np.int32(pat_df_resampled['pid'])
-        # get offsets in minutes from index
-        pat_df_resampled['offset'] = np.int32(pat_df_resampled.index.total_seconds()/60)
-        # append to file
-        if num_pat == 0:
-            f = open('REDACTED' + str(resample_factor_in_min) +'min.csv', 'w')
-            pat_df_resampled.to_csv(f, header=True, index=False)
+    num_pat = 0
+    num_miss = 0
+    f_miss = open(paths.eICU_proc_dir + 'pids_missing_vitals.txt', 'a')
+    for pid in pids:    # have to go patient by patient
+        pat_df_resampled = resample_eICU_patient(pid, resample_factor_in_min, variables, upto_in_minutes)
+        if pat_df_resampled is None:
+            f_miss.write(str(pid) + '\n')
+            num_miss += 1
+            continue
         else:
-            pat_df_resampled.to_csv(f, header=False, index=False)
-
+            if num_pat == 0:
+                f = open(paths.eICU_proc_dir + 'resampled_pats' + str(resample_factor_in_min) +'min.csv', 'w')
+                pat_df_resampled.to_csv(f, header=True, index=False)
+            else:
+                pat_df_resampled.to_csv(f, header=False, index=False)
+            num_pat += 1
         if num_pat % 100 == 0:
             print(num_pat)
             f.flush()
+            f_miss.flush()
+
+    print('Acquired data on', num_pat, 'patients.')
+    print('Skipped', num_miss, 'patients.')
     return True
 
 def get_cohort_of_complete_downsampled_patients(time_in_hours=4, resample_factor_in_min=15):
@@ -731,7 +751,7 @@ def get_cohort_of_complete_downsampled_patients(time_in_hours=4, resample_factor
 
     """
 
-    resampled_pats = pd.read_csv('REDACTED' + str(resample_factor_in_min) + 'min.csv')
+    resampled_pats = pd.read_csv(paths.eICU_proc_dir + 'resampled_pats' + str(resample_factor_in_min) + 'min.csv')
 
     time_in_minutes = time_in_hours * 60
 
@@ -741,25 +761,27 @@ def get_cohort_of_complete_downsampled_patients(time_in_hours=4, resample_factor
 
     # restrict time consideration
     print('Restricting to offsets below', time_in_minutes)
-    df = df_posoffset[df_posoffset.offset <= time_in_minutes]
+    df = df_posoffset.loc[df_posoffset.offset <= time_in_minutes]
 
     #variables = ['sao2', 'heartrate', 'respiration', 'systemicmean']
-    #variables = ['sao2', 'heartrate', 'respiration']
-    
+    variables = ['sao2', 'heartrate', 'respiration']
+
     # patients with no missing values in those variables (this is slow)
     print('Finding patients with no missing values in', ','.join(variables))
     good_patients = df.groupby('pid').filter(lambda x: np.all(x.loc[:, variables].isnull().sum() == 0))
-    # extract the pids, save the cohort
-    print('Saving...')
-    cohort = (set(good_patients.pid))
-    f = open('REDACTED' + str(resample_factor_in_min) + 'min.csv', 'w')
-    for pid in cohort: f.write(str(int(pid)) + '\n')
-    f.close()
 
-    # save the data (only first time_in_hours hours!)
-    good_patients.to_csv('REDACTED' + str(resample_factor_in_min) + 'min.csv', index=False)
-    
-    return True
+    # extract the pids, save the cohort
+    cohort = good_patients.pid.drop_duplicates()
+
+    if cohort.shape[0] < 2:
+        print('ERROR: not enough patients in cohort.', cohort.shape[0])
+        return False
+    else:
+        print('Saving...')
+        cohort.to_csv(paths.eICU_proc_dir + 'cohort_complete_resampled_pats_' + str(resample_factor_in_min) + 'min.csv', header=False, index=False)
+        # save the full data (not just cohort)
+        good_patients.to_csv(paths.eICU_proc_dir + 'complete_resampled_pats_' + str(resample_factor_in_min) + 'min.csv', index=False)
+        return True
 
 def get_eICU_with_targets(use_age=False, use_gender=False, save=False):
     """
@@ -778,11 +800,11 @@ def get_eICU_with_targets(use_age=False, use_gender=False, save=False):
 
     # keep only static information of patients that are in the resampled table
     pat_dfs = pat_dfs[pat_dfs.patientunitstayid.isin(labels)]
-    
+
     # reordering df to have the same order as samples and labels
     pat_dfs.set_index('patientunitstayid', inplace=True)
     pat_dfs.reindex(labels)
-   
+
     # target variables to keep. For now we don't use hospitaldischargeoffset since it is the only integer variable.
     #target_vars = ['hospitaldischargeoffset', 'hospitaldischargestatus', 'apacheadmissiondx', 'hospitaldischargelocation', 'unittype', 'unitadmitsource']
     real_vars = ['age']
@@ -794,7 +816,7 @@ def get_eICU_with_targets(use_age=False, use_gender=False, save=False):
     if use_gender: target_vars += ['gender']
 
     targets_df = pat_dfs.loc[:, target_vars]
-    
+
     # remove patients by criteria
             # missing data in any target
     targets_df.dropna(how='any', inplace=True)
@@ -812,10 +834,10 @@ def get_eICU_with_targets(use_age=False, use_gender=False, save=False):
     assert len(keep_indices) == targets_df.shape[0]
     new_samples = samples[keep_indices]
     new_labels = np.array(labels)[keep_indices]
-    
+
     # triple check the labels are correct
     assert np.array_equal(targets_df.index, new_labels)
-    
+
     # getn non-one-hot targets (strings)
     targets = targets_df.values
 
@@ -835,7 +857,7 @@ def get_eICU_with_targets(use_age=False, use_gender=False, save=False):
     assert np.all(targets_df_oh[nancols].sum() == 0)
     targets_df_oh.drop(nancols, axis=1, inplace=True)
     targets_oh = targets_df_oh.values
-    
+
     if save:
         # save!
         # merge with training data, for LR saving
@@ -866,7 +888,7 @@ def generate_synthetic(identifier, epoch, n_train, predict_labels=False):
     - Save to format easy for training classifier on (see Eval)
     """
     settings = json.load(open('./experiments/settings/' + identifier + '.txt', 'r'))
-    if not settings['cond_dim'] > 0: 
+    if not settings['cond_dim'] > 0:
         assert settings['predict_labels']
         assert predict_labels
     # get the test data
