@@ -7,6 +7,9 @@ from time import time
 from matplotlib.colors import hsv_to_rgb
 from pandas import read_table, read_hdf
 
+import real_paths as paths
+from data_utils import scale_data
+
 def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch,
         identifier, num_epochs, resample_rate_in_min, multivariate_mnist,
         seq_length, labels):
@@ -485,7 +488,8 @@ def visualise_latent(Z, identifier):
     plt.close()
     return True
 
-
+   
+ 
 # --- to do with the model --- #
 def plot_parameters(parameters, identifier):
     """
@@ -623,6 +627,217 @@ def view_mnist_eval(identifier, train_X, train_Y, synth_X, synth_Y, test_X, test
     plt.title(identifier)
     plt.savefig('./experiments/tstr/' + identifier + '_preds.png')
     return True
+
+def view_marginals_raw(data, label=''):
+    """
+    Sort of a duplication with 'view_marginals_cristobal', this doesn't attempt to compare distributions or anything.
+    """
+    variables = ['sao2', 'heartrate', 'respiration', 'systemicmean']
+
+    num_gradations = 25
+    # for cutoff in the gradations, what fraction of samples (at a given time point) fall into that cutoff bracket?
+    grid = np.zeros(shape=(16, num_gradations, 4))
+    grid = np.zeros(shape=(16, num_gradations, 4))
+    assert data.shape[-1] == 4
+    ranges = []
+    for var in range(4):
+        # allow for a different range per variable (if zoom)
+        low = np.min(data[:, :, var])
+        high = np.max(data[:, :, var])
+        ranges.append([low, high])
+        gradations = np.linspace(low, high, num_gradations) 
+        for (i, cutoff) in enumerate(gradations):
+            # take the mean over samples
+            frac = ((data[:, :, var] > low) & (data[:, :, var] <= cutoff)).mean(axis=0)
+            low = cutoff
+            grid[:, i, var] = frac
+
+    fig, axarr = plt.subplots(nrows=4, ncols=1, sharex=True)
+    axarr[0].imshow(grid[:, :, 0].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[1].imshow(grid[:, :, 1].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[2].imshow(grid[:, :, 2].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[3].imshow(grid[:, :, 3].T, origin='lower', aspect=0.5, cmap='magma_r')
+
+    for (var, ax) in enumerate(axarr):
+        labels = np.round(np.linspace(ranges[var][0], ranges[var][1], num_gradations)[1::4], 0)
+        ax.set_yticks(np.arange(num_gradations)[1::4])
+        ax.set_yticklabels(labels)
+        ax.set_ylabel(variables[var])
+        ax.yaxis.set_ticks_position('none') 
+        ax.xaxis.set_ticks_position('none') 
+        ax.set_adjustable('box-forced')
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.grid(b=True, color='black', alpha=0.2, linestyle='--')
+
+    axarr[-1].set_xticks(np.arange(16)[::2])
+    
+    plt.tight_layout(pad=0.0, w_pad=-5.0, h_pad=0.1) 
+    plt.savefig("./experiments/eval/eICU_marginals_" + label + ".png")
+
+    return True
+
+def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
+    """
+    View marginals of the synthetic data (compare to real data), from the data Cristobal generated.
+    """
+    samples_path = paths.eICU_synthetic_dir + 'samples_eICU_cdgan_synthetic_dataset_r' + str(rep) + '_' + str(epoch) + '.pk'
+    samples = np.load(samples_path)
+    labels_path = paths.eICU_synthetic_dir + 'labels_eICU_cdgan_synthetic_dataset_r' + str(rep) + '_' + str(epoch) + '.pk'
+    labels = np.load(labels_path)
+    real_path = paths.eICU_task_data
+    raw_real_train = np.load(real_path).item()['X_train'].reshape(-1, 16, 4)
+    real_test = np.load(real_path).item()['X_test'].reshape(-1, 16, 4)
+    real_vali = np.load(real_path).item()['X_vali'].reshape(-1, 16, 4)
+    # discard vali, test
+    real, scaled_vali, scaled_test = scale_data(raw_real_train, real_vali, real_test)
+    real = raw_real_train
+    view_marginals_raw(raw_real_train, label='raw_real_train')
+    view_marginals_raw(real, label='real_train')
+    view_marginals_raw(samples, label='synthetic')
+ 
+    variables = ['sao2', 'heartrate', 'respiration', 'systemicmean']
+
+    # get the scaling factors
+    scaling_factors = {'a': np.zeros(shape=(16, 4)), 'b': np.zeros(shape=(16, 4))}
+    ranges = []
+    for var in range(4):
+        var_min = 100
+        var_max = 0
+        for timestep in range(16):
+            min_val = np.min([np.min(raw_real_train[:, timestep, var]), np.min(real_vali[:, timestep, var])])
+            max_val = np.max([np.max(raw_real_train[:, timestep, var]), np.max(real_vali[:, timestep, var])])
+            if min_val < var_min:
+                var_min = min_val
+            if max_val > var_max:
+                var_max = max_val
+            a = (max_val - min_val)/2
+            b = (max_val + min_val)/2
+            scaling_factors['a'][timestep, var] = a
+            scaling_factors['b'][timestep, var] = b
+        ranges.append([var_min, var_max])
+
+    # now, scale the synthetic data manually
+    samples_scaled = np.zeros_like(samples)
+    for var in range(4):
+        for timestep in range(16):
+            samples_scaled[:, timestep, var] = samples[:, timestep, var]*scaling_factors['a'][timestep, var] + scaling_factors['b'][timestep, var]
+
+    if zoom:
+        # use modes, skip for now
+        modes = False
+        if modes:
+            # get rough region of interest, then zoom in on it afterwards!
+            num_gradations = 5
+            gradations = np.linspace(-1, 1, num_gradations) 
+            # for cutoff in the gradations, what fraction of samples (at a given time point) fall into that cutoff bracket?
+            lower = 0
+            real_grid = np.zeros(shape=(16, num_gradations, 4))
+            for (i, cutoff) in enumerate(gradations):
+                # take the mean over samples
+                real_frac = ((real > lower) & (real <= cutoff)).mean(axis=0)
+                lower = cutoff
+                real_grid[:, i, :] = real_frac
+            time_averaged_grid = np.mean(real_grid, axis=0)
+            # get the most populated part of the grid for each variable
+            grid_modes = np.argmax(time_averaged_grid, axis=0)
+            lower = 0
+            ranges = []
+            for i in grid_modes:
+                lower = gradations[i-1]
+                upper = gradations[i]
+                ranges.append([lower, upper])
+        else:
+            # hand-crafted ranges
+            ranges = [[88, 100], [30, 130], [7, 60], [35, 135]]
+
+    num_gradations = 25
+    # for cutoff in the gradations, what fraction of samples (at a given time point) fall into that cutoff bracket?
+    grid = np.zeros(shape=(16, num_gradations, 4))
+    real_grid = np.zeros(shape=(16, num_gradations, 4))
+    assert samples.shape[-1] == 4
+    for var in range(4):
+        # allow for a different range per variable (if zoom)
+        low = ranges[var][0]
+        high = ranges[var][1]
+        gradations = np.linspace(low, high, num_gradations) 
+        for (i, cutoff) in enumerate(gradations):
+            # take the mean over samples
+            frac = ((samples_scaled[:, :, var] > low) & (samples_scaled[:, :, var] <= cutoff)).mean(axis=0)
+            real_frac = ((real[:, :, var] > low) & (real[:, :, var] <= cutoff)).mean(axis=0)
+            low = cutoff
+            grid[:, i, var] = frac
+            real_grid[:, i, var] = real_frac
+
+    # now plot this as an image
+    fig, axarr = plt.subplots(nrows=4, ncols=2, sharey='row', sharex=True) 
+    axarr[0, 0].imshow(grid[:, :, 0].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[1, 0].imshow(grid[:, :, 1].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[2, 0].imshow(grid[:, :, 2].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[3, 0].imshow(grid[:, :, 3].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[0, 1].imshow(real_grid[:, :, 0].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[1, 1].imshow(real_grid[:, :, 1].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[2, 1].imshow(real_grid[:, :, 2].T, origin='lower', aspect=0.5, cmap='magma_r')
+    axarr[3, 1].imshow(real_grid[:, :, 3].T, origin='lower', aspect=0.5, cmap='magma_r')
+   
+    axarr[0, 0].set_title("synthetic")
+    axarr[0, 1].set_title("real")
+    for var in range(4):
+        low, high = ranges[var]
+        labels = np.linspace(low, high, num_gradations)[1::4]
+        labels = np.round(labels, 0)
+        axarr[var, 0].set_yticklabels(labels)
+        axarr[var, 0].set_yticks(np.arange(num_gradations)[1::4])
+        axarr[var, 0].set_ylabel(variables[var])
+        for ax in axarr[var, :]:
+            ax.yaxis.set_ticks_position('none') 
+            ax.xaxis.set_ticks_position('none') 
+            ax.set_adjustable('box-forced')
+            ax.spines['top'].set_visible(False)
+            ax.spines['bottom'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.grid(b=True, color='black', alpha=0.2, linestyle='--')
+
+    axarr[-1, 0].set_xticks(np.arange(16)[::2])
+    axarr[-1, 1].set_xticks(np.arange(16)[::2])
+    
+    if zoom:
+        plt.suptitle('(zoomed)')
+
+    plt.tight_layout(pad=0.0, w_pad=-5.0, h_pad=0.1) 
+    plt.savefig("./experiments/eval/eICU_cristobal_marginals_r" + str(rep) + "_epoch" + str(epoch) + ".png")
+
+    # now make the histograms 
+    fig, axarr = plt.subplots(nrows=1, ncols=4)
+    axarr[0].set_ylabel("density")
+    axarr[0].hist(real[:, :, 0].flatten(), normed=True, color='black', alpha=0.8, range=ranges[0], bins=min(50, (ranges[0][1] - ranges[0][0])), label='real')
+    axarr[1].hist(real[:, :, 1].flatten(), normed=True, color='black', alpha=0.8, range=ranges[1], bins=50)
+    axarr[2].hist(real[:, :, 2].flatten(), normed=True, color='black', alpha=0.8, range=ranges[2], bins=50)
+    axarr[3].hist(real[:, :, 3].flatten(), normed=True, color='black', alpha=0.8, range=ranges[3], bins=50)
+    axarr[0].hist(samples_scaled[:, :, 0].flatten(), normed=True, alpha=0.6, range=ranges[0], bins=min(50, (ranges[0][1] - ranges[0][0])), label='synthetic')
+    axarr[0].legend()
+    axarr[1].hist(samples_scaled[:, :, 1].flatten(), normed=True, alpha=0.6, range=ranges[1], bins=50)
+    axarr[2].hist(samples_scaled[:, :, 2].flatten(), normed=True, alpha=0.6, range=ranges[2], bins=50)
+    axarr[3].hist(samples_scaled[:, :, 3].flatten(), normed=True, alpha=0.6, range=ranges[3], bins=50)
+    for (var, ax) in enumerate(axarr):
+        ax.set_xlabel(variables[var])
+        ax.yaxis.set_ticks_position('none') 
+        ax.xaxis.set_ticks_position('none') 
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.grid(b=True, color='black', alpha=0.2, linestyle='--')
+
+    plt.gcf().subplots_adjust(bottom=0.2)
+    fig.set_size_inches(10, 3)
+    plt.savefig("./experiments/eval/eICU_cristobal_hist_r" + str(rep) + "_epoch" + str(epoch) + ".png")
+
+    return True
+
 
 # --- nips !!! --- #
 def nips_plot_rbf(sample, index, which='train'):
