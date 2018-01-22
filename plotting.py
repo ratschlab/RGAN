@@ -7,7 +7,7 @@ from time import time
 from matplotlib.colors import hsv_to_rgb
 from pandas import read_table, read_hdf
 
-import real_paths as paths
+import paths
 from data_utils import scale_data
 
 def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch,
@@ -38,7 +38,7 @@ def visualise_at_epoch(vis_sample, data, predict_labels, one_hot, epoch,
                 idx=epoch)
     else:
         save_plot_sample(vis_sample, epoch, identifier, n_samples=6,
-                num_epochs=num_epochs) 
+                num_epochs=num_epochs)
 
     return True
 
@@ -46,7 +46,7 @@ def save_plot_sample(samples, idx, identifier, n_samples=6, num_epochs=None, nco
     assert n_samples <= samples.shape[0]
     assert n_samples % ncol == 0
     sample_length = samples.shape[1]
-  
+
     if not num_epochs is None:
         col = hsv_to_rgb((1, 1.0*(idx)/num_epochs, 0.8))
     else:
@@ -75,7 +75,7 @@ def save_plot_interpolate(input_samples, samples, idx, identifier,  num_epochs=N
     """ very boilerplate, unsure how to make nicer """
     n_samples = samples.shape[0]
     sample_length = samples.shape[1]
-  
+
     if not num_epochs is None:
         col = hsv_to_rgb((1, 1.0*(idx)/num_epochs, 0.8))
     else:
@@ -114,7 +114,7 @@ def save_plot_interpolate(input_samples, samples, idx, identifier,  num_epochs=N
         # now do the real samples
         axarr[startat].plot(x_points, input_samples[0], color='green', linestyle='--')
         axarr[-1].plot(x_points, input_samples[1], color='green', linestyle='--')
-    
+
     axarr[-1].xaxis.set_ticks(range(0, sample_length, int(sample_length/4)))
     fig.suptitle(idx)
     fig.subplots_adjust(hspace = 0.2)
@@ -124,7 +124,7 @@ def save_plot_interpolate(input_samples, samples, idx, identifier,  num_epochs=N
     plt.close()
     return
 
-def reconstruction_errors(identifier, train_errors, vali_errors, 
+def reconstruction_errors(identifier, train_errors, vali_errors,
                           generated_errors, random_errors):
     """
     Plot two histogram of the reconstruction errors.
@@ -179,7 +179,7 @@ def save_plot_vary_dimension(samples_list, idx, identifier, n_dim):
     """
     assert len(samples_list) == n_dim
     sample_length = samples_list[0].shape[1]
-  
+
     x_points = np.arange(sample_length)
 
     nrow = samples_list[0].shape[0]
@@ -230,7 +230,7 @@ def vary_latent_dimension(sample, dimension, n_steps=6):
     return samples
 
 def plot_sine_evaluation(real_samples, fake_samples, idx, identifier):
-    """ 
+    """
     Create histogram of fake (generated) samples frequency, amplitude distribution.
     Also for real samples.
     """
@@ -242,8 +242,8 @@ def plot_sine_evaluation(real_samples, fake_samples, idx, identifier):
     w_real = np.mean(np.abs(np.fft.rfft(real_samples[:, :, 0])), axis=0)
     w_fake = np.mean(np.abs(np.fft.rfft(fake_samples[:, :, 0])), axis=0)
     ### amplitude
-    A_real = np.max(np.abs(real_samples[:, :, 0]), axis=1) 
-    A_fake = np.max(np.abs(fake_samples[:, :, 0]), axis=1) 
+    A_real = np.max(np.abs(real_samples[:, :, 0]), axis=1)
+    A_fake = np.max(np.abs(fake_samples[:, :, 0]), axis=1)
     ### now plot
     nrow = 2
     ncol = 2
@@ -258,7 +258,7 @@ def plot_sine_evaluation(real_samples, fake_samples, idx, identifier):
     axarr[0, 1].hist(A_real, normed=True, color='#30ba50', bins=30)
     axarr[0, 1].set_title("amplitude", fontsize=16)
     axarr[1, 1].hist(A_fake, normed=True, color='#ba4730', bins=30)
-   
+
     fig.savefig('./experiments/plots/' + identifier + '_eval' + str(idx).zfill(4) +'.png')
     plt.clf()
     plt.close()
@@ -275,8 +275,8 @@ def plot_trace(identifier, xmax=250, final=False, dp=False):
         trace_dp_path = './experiments/traces/' + identifier + '.dptrace.txt'
         da_dp = read_table(trace_dp_path, sep=' ')
         nrow += 1
-    
-    ncol=1  
+
+    ncol=1
     fig, axarr = plt.subplots(nrow, ncol, sharex='col', figsize=(6, 6))
 
     # D_loss
@@ -336,7 +336,7 @@ def plot_trace(identifier, xmax=250, final=False, dp=False):
         axarr[2].get_yaxis().set_ticks(ll_ticks)
         for tick in ll_ticks:
             axarr[2].plot((-10, xmax+10), (tick, tick), ls='dotted', lw=0.5, color='black', alpha=0.4, zorder=0)
-   
+
     if dp:
         assert da_dp.columns[0] == 'epoch'
         epochs = da_dp['epoch']
@@ -449,18 +449,18 @@ def save_mnist_plot_sample(samples, idx, identifier, n_samples, labels=None):
         label_titles = ['NA']*n_samples
     assert n_samples % 2 == 0
     img_size = int(np.sqrt(samples.shape[1]))
-    
+
     nrow = int(n_samples/2)
     ncol = 2
     fig, axarr = plt.subplots(nrow, ncol, sharex=True, figsize=(8, 8))
     for m in range(nrow):
         # first column
         sample = samples[m, :, 0]
-        axarr[m, 0].imshow(sample.reshape([img_size,img_size]), cmap='gray')            
+        axarr[m, 0].imshow(sample.reshape([img_size,img_size]), cmap='gray')
         axarr[m, 0].set_title(str(label_titles[m]))
         # second column
         sample = samples[nrow + m, :, 0]
-        axarr[m, 1].imshow(sample.reshape([img_size,img_size]), cmap='gray')           
+        axarr[m, 1].imshow(sample.reshape([img_size,img_size]), cmap='gray')
         axarr[m, 1].set_title(str(label_titles[m + nrow]))
     fig.suptitle(idx)
     fig.suptitle(idx)
@@ -476,7 +476,7 @@ def visualise_latent(Z, identifier):
     """
     seq_length = Z.shape[0]
     latent_dim = Z.shape[1]
-    if latent_dim > 2: 
+    if latent_dim > 2:
         print('WARNING: Only visualising first two dimensions of latent space.')
     h = np.random.random()
     colours = np.array([hsv_to_rgb((h, i/seq_length, 0.96)) for i in range(seq_length)])
@@ -488,8 +488,8 @@ def visualise_latent(Z, identifier):
     plt.close()
     return True
 
-   
- 
+
+
 # --- to do with the model --- #
 def plot_parameters(parameters, identifier):
     """
@@ -498,7 +498,7 @@ def plot_parameters(parameters, identifier):
     generator_out = parameters['generator/W_out_G:0']
     generator_weights = parameters['generator/rnn/lstm_cell/weights:0'] # split this into four
     generator_matrices = np.split(generator_weights, 4, 1)
-    fig, axarr = plt.subplots(5, 1, sharex=True, 
+    fig, axarr = plt.subplots(5, 1, sharex=True,
             gridspec_kw = {'height_ratios':[0.2, 1, 1, 1, 1]}, figsize=(3,13))
 
     axarr[0].matshow(generator_out.T, extent=[0,100,0,100])
@@ -526,8 +526,8 @@ def plot_parameters(parameters, identifier):
     return True
 
 
-def vis_eICU_patients_downsampled(pat_arrs, time_step, time_steps_to_plot=None, 
-        variable_names=['sao2', 'heartrate', 'respiration', 'systemicmean'], 
+def vis_eICU_patients_downsampled(pat_arrs, time_step, time_steps_to_plot=None,
+        variable_names=['sao2', 'heartrate', 'respiration', 'systemicmean'],
         identifier=None, idx=0):
     """
     Given a list of patient dataframes, visualise the chosen variables.
@@ -578,7 +578,7 @@ def vis_eICU_patients_downsampled(pat_arrs, time_step, time_steps_to_plot=None,
 ### TSTR ###
 def view_mnist_eval(identifier, train_X, train_Y, synth_X, synth_Y, test_X, test_Y, synth_predY, real_predY):
     """
-    Basically just 
+    Basically just
     http://scikit-learn.org/stable/auto_examples/classification/plot_digits_classification.html
     """
     # resize everything
@@ -645,7 +645,7 @@ def view_marginals_raw(data, label=''):
         low = np.min(data[:, :, var])
         high = np.max(data[:, :, var])
         ranges.append([low, high])
-        gradations = np.linspace(low, high, num_gradations) 
+        gradations = np.linspace(low, high, num_gradations)
         for (i, cutoff) in enumerate(gradations):
             # take the mean over samples
             frac = ((data[:, :, var] > low) & (data[:, :, var] <= cutoff)).mean(axis=0)
@@ -663,8 +663,8 @@ def view_marginals_raw(data, label=''):
         ax.set_yticks(np.arange(num_gradations)[1::4])
         ax.set_yticklabels(labels)
         ax.set_ylabel(variables[var])
-        ax.yaxis.set_ticks_position('none') 
-        ax.xaxis.set_ticks_position('none') 
+        ax.yaxis.set_ticks_position('none')
+        ax.xaxis.set_ticks_position('none')
         ax.set_adjustable('box-forced')
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
@@ -673,8 +673,8 @@ def view_marginals_raw(data, label=''):
         ax.grid(b=True, color='black', alpha=0.2, linestyle='--')
 
     axarr[-1].set_xticks(np.arange(16)[::2])
-    
-    plt.tight_layout(pad=0.0, w_pad=-5.0, h_pad=0.1) 
+
+    plt.tight_layout(pad=0.0, w_pad=-5.0, h_pad=0.1)
     plt.savefig("./experiments/eval/eICU_marginals_" + label + ".png")
 
     return True
@@ -697,7 +697,7 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
     view_marginals_raw(raw_real_train, label='raw_real_train')
     view_marginals_raw(real, label='real_train')
     view_marginals_raw(samples, label='synthetic')
- 
+
     variables = ['sao2', 'heartrate', 'respiration', 'systemicmean']
 
     # get the scaling factors
@@ -731,7 +731,7 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
         if modes:
             # get rough region of interest, then zoom in on it afterwards!
             num_gradations = 5
-            gradations = np.linspace(-1, 1, num_gradations) 
+            gradations = np.linspace(-1, 1, num_gradations)
             # for cutoff in the gradations, what fraction of samples (at a given time point) fall into that cutoff bracket?
             lower = 0
             real_grid = np.zeros(shape=(16, num_gradations, 4))
@@ -762,7 +762,7 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
         # allow for a different range per variable (if zoom)
         low = ranges[var][0]
         high = ranges[var][1]
-        gradations = np.linspace(low, high, num_gradations) 
+        gradations = np.linspace(low, high, num_gradations)
         for (i, cutoff) in enumerate(gradations):
             # take the mean over samples
             frac = ((samples_scaled[:, :, var] > low) & (samples_scaled[:, :, var] <= cutoff)).mean(axis=0)
@@ -772,7 +772,7 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
             real_grid[:, i, var] = real_frac
 
     # now plot this as an image
-    fig, axarr = plt.subplots(nrows=4, ncols=2, sharey='row', sharex=True) 
+    fig, axarr = plt.subplots(nrows=4, ncols=2, sharey='row', sharex=True)
     axarr[0, 0].imshow(grid[:, :, 0].T, origin='lower', aspect=0.5, cmap='magma_r')
     axarr[1, 0].imshow(grid[:, :, 1].T, origin='lower', aspect=0.5, cmap='magma_r')
     axarr[2, 0].imshow(grid[:, :, 2].T, origin='lower', aspect=0.5, cmap='magma_r')
@@ -781,7 +781,7 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
     axarr[1, 1].imshow(real_grid[:, :, 1].T, origin='lower', aspect=0.5, cmap='magma_r')
     axarr[2, 1].imshow(real_grid[:, :, 2].T, origin='lower', aspect=0.5, cmap='magma_r')
     axarr[3, 1].imshow(real_grid[:, :, 3].T, origin='lower', aspect=0.5, cmap='magma_r')
-   
+
     axarr[0, 0].set_title("synthetic")
     axarr[0, 1].set_title("real")
     for var in range(4):
@@ -792,8 +792,8 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
         axarr[var, 0].set_yticks(np.arange(num_gradations)[1::4])
         axarr[var, 0].set_ylabel(variables[var])
         for ax in axarr[var, :]:
-            ax.yaxis.set_ticks_position('none') 
-            ax.xaxis.set_ticks_position('none') 
+            ax.yaxis.set_ticks_position('none')
+            ax.xaxis.set_ticks_position('none')
             ax.set_adjustable('box-forced')
             ax.spines['top'].set_visible(False)
             ax.spines['bottom'].set_visible(False)
@@ -803,14 +803,14 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
 
     axarr[-1, 0].set_xticks(np.arange(16)[::2])
     axarr[-1, 1].set_xticks(np.arange(16)[::2])
-    
+
     if zoom:
         plt.suptitle('(zoomed)')
 
-    plt.tight_layout(pad=0.0, w_pad=-5.0, h_pad=0.1) 
+    plt.tight_layout(pad=0.0, w_pad=-5.0, h_pad=0.1)
     plt.savefig("./experiments/eval/eICU_cristobal_marginals_r" + str(rep) + "_epoch" + str(epoch) + ".png")
 
-    # now make the histograms 
+    # now make the histograms
     fig, axarr = plt.subplots(nrows=1, ncols=4)
     axarr[0].set_ylabel("density")
     axarr[0].hist(real[:, :, 0].flatten(), normed=True, color='black', alpha=0.8, range=ranges[0], bins=min(50, (ranges[0][1] - ranges[0][0])), label='real')
@@ -824,8 +824,8 @@ def view_marginals_cristobal(rep=0, epoch=300, zoom=False):
     axarr[3].hist(samples_scaled[:, :, 3].flatten(), normed=True, alpha=0.6, range=ranges[3], bins=50)
     for (var, ax) in enumerate(axarr):
         ax.set_xlabel(variables[var])
-        ax.yaxis.set_ticks_position('none') 
-        ax.xaxis.set_ticks_position('none') 
+        ax.yaxis.set_ticks_position('none')
+        ax.xaxis.set_ticks_position('none')
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         ax.spines['right'].set_visible(False)
