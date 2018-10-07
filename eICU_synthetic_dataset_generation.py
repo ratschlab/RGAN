@@ -131,7 +131,7 @@ for identifier in identifiers:
                 cell=cell,
                 dtype=tf.float32,
                 inputs=decoder_input)
-            rnn_outputs_flat = tf.reshape(rnn_outputs, [-1, hidden_units_g])
+            rnn_outputs_flat = tf.reshape(rnn_outputs, [-1, hidden_units_d])
             logits = tf.matmul(rnn_outputs_flat, W_out_D) + b_out_D
             output = tf.nn.sigmoid(logits)
         return output, logits
